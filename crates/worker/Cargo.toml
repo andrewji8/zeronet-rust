@@ -1,0 +1,19 @@
+﻿[package]
+name = "worker"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kad = { path = "../kad" }
+content = { path = "../content" }
+net = { path = "../net" }
+storage = { path = "../storage" }
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+serde = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+base64 = { workspace = true }
+serde_json = { workspace = true }

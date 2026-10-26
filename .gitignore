@@ -1,0 +1,11 @@
+﻿# Rust build output
+/target
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Test temp dirs (created under system temp, but ignore any local leftovers)
+*.tmp

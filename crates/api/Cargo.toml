@@ -1,0 +1,15 @@
+﻿[package]
+name = "api"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kad = { path = "../kad" }
+content = { path = "../content" }
+storage = { path = "../storage" }
+worker = { path = "../worker" }
+tokio = { workspace = true, features = ["macros", "rt", "sync", "net"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }

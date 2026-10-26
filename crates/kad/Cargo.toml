@@ -1,0 +1,12 @@
+﻿[package]
+name = "kad"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "sync", "time", "rt"] }
+futures = { workspace = true }
+async-trait = { workspace = true }
+rand = { workspace = true }

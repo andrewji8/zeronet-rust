@@ -1,0 +1,12 @@
+﻿[package]
+name = "storage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+content = { path = "../content" }
+tokio = { workspace = true, features = ["macros", "fs", "rt", "sync"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
