@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 kad = { path = "../kad" }
 content = { path = "../content" }
-tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time", "fs"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
