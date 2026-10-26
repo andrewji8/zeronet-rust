@@ -24,6 +24,8 @@ pub enum DownloadTaskError {
     Peer(String),
     #[error("hash or store: {0}")]
     Store(String),
+    #[error("no reachable provider for content key")]
+    NoProvider,
 }
 
 /// Concurrent download engine bound to one peer and one site.
@@ -105,6 +107,7 @@ impl From<crate::DownloadError> for DownloadTaskError {
         match e {
             crate::DownloadError::Peer(p) => DownloadTaskError::Peer(p.to_string()),
             crate::DownloadError::Store(s) => DownloadTaskError::Store(s),
+            crate::DownloadError::NoProvider => DownloadTaskError::NoProvider,
         }
     }
 }
@@ -219,3 +222,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
+

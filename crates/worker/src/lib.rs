@@ -7,7 +7,7 @@ pub mod task;
 pub mod download;
 pub mod engine;
 
-pub use download::{download_and_store, fetch_file, DownloadError, stage_of};
+pub use download::{download_and_store, download_via_dht, fetch_file, DownloadError, stage_of};
 pub use engine::{DownloadEngine, DownloadTaskError, TaskOutcome};
 
 use kad::PeerId;
@@ -49,6 +49,7 @@ impl Stats {
         Self { completed: std::sync::atomic::AtomicU32::new(0), failed: std::sync::atomic::AtomicU32::new(0) }
     }
 }
+
 
 
 

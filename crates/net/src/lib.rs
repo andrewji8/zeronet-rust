@@ -25,7 +25,9 @@ pub struct PeerConn {
 }
 
 /// Wire DHT helpers (transport, address book, provider exchange).
-pub use dht::{AddressBook, NetQueryTransport, find_providers_over_wire, provide_over_wire};
+pub use dht::{
+    AddressBook, NetQueryTransport, find_providers_over_wire, peer_addr, provide_over_wire,
+};
 
 /// Manage a pool of peer connections.
 pub struct ConnectionManager {
@@ -62,6 +64,7 @@ pub enum NetError {
     #[error("protocol: {0}")]
     Protocol(String),
 }
+
 
 
 

@@ -49,7 +49,7 @@ ZRS_EXPECTED_HASH=<64-hex blake3> ./target/debug/zeronet-rs download 127.0.0.1:P
 ## 测试
 
 ```bash
-cargo test          # 33 lib + 2 集成 tests，全绿
+cargo test          # 33 lib + 3 集成 tests，全绿
 ```
 
 | crate | 测试数 | 覆盖 |
@@ -92,11 +92,12 @@ cargo test          # 33 lib + 2 集成 tests，全绿
 - [ ] `node` 子命令接通：tokio runtime + TCP 监听 + DHT bootstrap + 调度
 - [ ] DHT 实际走线：`PutValue/GetValue/FindProviders` RPC 经 TCP + 可选 TLS/Noise
 - [ ] `api` 的 axum 路由（替代 ZeroNet 949 行 `UiRequest`）
-- [ ] `worker` 接入 `find_providers`，完成"发现→取文件"全链路
+- [x] `worker` 接入 `find_providers`（`download_via_dht`），"发现→取文件→校验→落盘"全链路打通
 
 ## 许可证
 
 MIT OR Apache-2.0
+
 
 
 

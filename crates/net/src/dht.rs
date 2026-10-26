@@ -243,3 +243,13 @@ pub async fn connect_and_bootstrap(
 
 
 
+
+/// Resolve a peer id to a reachable `SocketAddr` using the address book.
+///
+/// Provider ids returned by `find_providers_over_wire` are reachable only if
+/// we learned their address (either from a `GetClosestPeers` reply that
+/// carries `addr`, or from a bootstrap/handshake). This helper centralizes
+/// that lookup for the download path.
+pub fn peer_addr(addr_book: &AddressBook, id: &PeerId) -> Option<SocketAddr> {
+    addr_book.get(id)
+}

@@ -77,3 +77,66 @@ async fn two_nodes_discover_each_other() {
 
 
 
+
+/// The complete chain: discover a provider over the DHT, then download the
+/// file from it via `worker::download_via_dht` (BLAKE3-verified).
+#[tokio::test]
+async fn full_chain_discover_then_download() {
+    use kad::{KadConfig, Kademlia, PeerId, ProviderStore};
+    use net::AddressBook;
+    use std::sync::Arc;
+
+    // --- Provider node (serves a real file, announces itself) ---
+    let site = "1PROV";
+    let path = "index.html";
+    let file = b"<html>full chain</html>";
+    let expected = *blake3::hash(file).as_bytes();
+    let content_key = b"site-1PROV-index";
+
+    let p_id = PeerId([0x77u8; 32]);
+    let p_cfg = KadConfig::light_node();
+    let p_dht = Arc::new(Kademlia::new(p_id, p_cfg));
+    let p_prov = Arc::new(tokio::sync::Mutex::new(ProviderStore::new()));
+    let p_ab = Arc::new(AddressBook::new());
+    let p_root = std::env::temp_dir().join(format!("zrs_prov_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&p_root);
+    std::fs::create_dir_all(p_root.join(site)).unwrap();
+    std::fs::write(p_root.join(site).join(path), file).unwrap();
+    let p_server = net::server::start(p_dht, p_root.clone(), p_prov, p_ab.clone())
+        .await
+        .unwrap();
+
+    // --- Fetch node (discovers + downloads) ---
+    let f_id = PeerId([0x66u8; 32]);
+    let f_cfg = KadConfig::light_node();
+    let f_dht = Arc::new(Kademlia::new(f_id, f_cfg));
+    let f_prov = Arc::new(tokio::sync::Mutex::new(ProviderStore::new()));
+    let f_ab = Arc::new(AddressBook::new());
+
+    // Bootstrap: fetch node learns the provider's address + id.
+    let learned = net::dht::connect_and_bootstrap(f_dht, &f_ab, p_server.addr)
+        .await
+        .unwrap();
+    assert_eq!(learned, p_id, "fetch node must learn the provider id");
+
+    // Provider announces it serves the content, pushing to the fetch node.
+    net::dht::provide_over_wire(&f_prov, &f_ab, content_key, p_id, 1)
+        .await
+        .unwrap();
+
+    // The fetch node discovers the provider over the DHT, then downloads.
+    let out_root = std::env::temp_dir().join(format!("zrs_fetch_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out_root);
+
+    let stored = worker::download_via_dht(&f_ab, content_key, site, path, expected, &out_root, 4)
+        .await
+        .expect("full-chain download must succeed");
+
+    let downloaded = std::fs::read(&stored).unwrap();
+    assert_eq!(downloaded, file, "downloaded bytes must match the original");
+
+    let _ = p_server.stop().await;
+    let _ = std::fs::remove_dir_all(&p_root);
+    let _ = std::fs::remove_dir_all(&out_root);
+}
+
