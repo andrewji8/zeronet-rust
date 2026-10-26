@@ -8,6 +8,7 @@ pub mod frame;
 pub mod rpc;
 pub mod peer;
 pub mod server;
+pub mod dht;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -22,6 +23,9 @@ pub struct PeerConn {
     pub addr: SocketAddr,
     pub stream: TcpStream,
 }
+
+/// Wire DHT helpers (transport, address book, provider exchange).
+pub use dht::{AddressBook, NetQueryTransport, find_providers_over_wire, provide_over_wire};
 
 /// Manage a pool of peer connections.
 pub struct ConnectionManager {
@@ -58,6 +62,7 @@ pub enum NetError {
     #[error("protocol: {0}")]
     Protocol(String),
 }
+
 
 
 

@@ -104,9 +104,16 @@ async fn run_node(args: &[String]) {
 
     // --- Start inbound RPC server ---
     let dht_arc = Arc::new(dht);
-    let server_handle = net_server::start(dht_arc.clone(), data_dir.clone())
-        .await
-        .expect("failed to bind the inbound server");
+    let providers = Arc::new(tokio::sync::Mutex::new(kad::ProviderStore::new()));
+    let addr_book = Arc::new(net::AddressBook::new());
+    let server_handle = net_server::start(
+        dht_arc.clone(),
+        data_dir.clone(),
+        providers.clone(),
+        addr_book.clone(),
+    )
+    .await
+    .expect("failed to bind the inbound server");
     println!("  inbound RPC:     http/1 + JSON frames on {}", server_handle.addr);
 
     // --- Run for `max_sec`, then flush + stop ---
@@ -174,3 +181,4 @@ fn hex_decode(s: &str, out: &mut [u8; 32]) {
             .unwrap_or_else(|_| panic!("bad hex in ZRS_EXPECTED_HASH"));
     }
 }
+

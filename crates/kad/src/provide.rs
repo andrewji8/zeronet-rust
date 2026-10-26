@@ -3,14 +3,35 @@
 use crate::{Kademlia, PeerId};
 
 /// A locally known provider set keyed by content hash.
-#[derive(Default)]
+///
+/// Shared across the node (DHT answers + the wire transport) under a lock, so
+/// the server and the client see the same provider records.
+#[derive(Default, Clone)]
 pub struct ProviderStore {
     map: std::collections::HashMap<[u8; 32], Vec<PeerId>>,
 }
 
 impl ProviderStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Number of distinct content keys this node has provider records for.
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+}
+
+impl ProviderStore {
     pub fn add(&mut self, key: [u8; 32], peer: PeerId) {
-        self.map.entry(key).or_default().push(peer);
+        let v = self.map.entry(key).or_default();
+        if !v.contains(&peer) {
+            v.push(peer);
+        }
     }
 
     pub fn get(&self, key: &[u8; 32]) -> &[PeerId] {
@@ -33,3 +54,4 @@ pub async fn find_providers(dht: &Kademlia, target: &PeerId, _content_key: &[u8]
         .map(|p| p.id)
         .collect()
 }
+

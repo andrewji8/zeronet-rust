@@ -49,7 +49,7 @@ ZRS_EXPECTED_HASH=<64-hex blake3> ./target/debug/zeronet-rs download 127.0.0.1:P
 ## 测试
 
 ```bash
-cargo test          # 33 tests，全绿
+cargo test          # 33 lib + 2 集成 tests，全绿
 ```
 
 | crate | 测试数 | 覆盖 |
@@ -97,5 +97,6 @@ cargo test          # 33 tests，全绿
 ## 许可证
 
 MIT OR Apache-2.0
+
 
 

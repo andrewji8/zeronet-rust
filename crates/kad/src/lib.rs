@@ -16,6 +16,7 @@ pub mod persist;
 
 pub use config::KadConfig;
 pub use persist::{RtDb, DbError as RtDbError};
+pub use provide::ProviderStore;
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -76,12 +77,36 @@ pub struct Kademlia {
     pub config: KadConfig,
     pub self_id: PeerId,
     pub rt: Arc<Mutex<rt::RoutingTable>>,
+    /// Shared provider records. The wire transport / server read and write
+    /// this; it is what makes `find_providers` real (not just "closest peers").
+    pub providers: Arc<Mutex<ProviderStore>>,
 }
 
 impl Kademlia {
     pub fn new(self_id: PeerId, config: KadConfig) -> Self {
         let rt = Arc::new(Mutex::new(rt::RoutingTable::new(self_id, config.clone())));
-        Self { config, self_id, rt }
+        Self {
+            config,
+            self_id,
+            rt,
+            providers: Arc::new(Mutex::new(ProviderStore::default())),
+        }
+    }
+
+    /// Use a caller-provided shared provider store (so the server and the
+    /// transport answer from the same records).
+    pub fn with_providers(
+        self_id: PeerId,
+        config: KadConfig,
+        providers: std::sync::Arc<Mutex<ProviderStore>>,
+    ) -> Self {
+        let rt = std::sync::Arc::new(Mutex::new(rt::RoutingTable::new(self_id, config.clone())));
+        Self {
+            config,
+            self_id,
+            rt,
+            providers,
+        }
     }
 
     /// Seed peers for bootstrap lookups.
@@ -200,6 +225,7 @@ mod tests {
         assert_ne!(a, c);
     }
 }
+
 
 
 
