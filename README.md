@@ -20,12 +20,12 @@ Rust 实现的去中心化加密站点网络，目标是**继承 ZeroNet 的内�
 
 ```
 crates/
-├── kad       Kademlia DHT 发现层：路由表(k-bucket+LRU+IP多样性)、查询状态机、
+├── kad       Kademlia DHT 发现层：路由表(k-bucket+LRU+IP多样性)、查询状态机、SQLite 持久化(RtDb)、
 │             provider、RT 刷新。参数对照 Amino。
 ├── content   内容寻址层：Ed25519+BLAKE3 Merkle manifest（原生），
 │             以及完整的 ZeroNet 兼容层（Secp256k1 验签 + 签名器，Python JSON 精确序列化）
 ├── net       TCP 传输层：长度前缀帧、GetFile/握手 RPC、peer 客户端
-├── storage   本地存储：站点目录、HashField 索引、store_verified(BLAKE3 校验+防路径穿越)
+├── storage   本地存储：站点目录、HashField 索引、store_verified(BLAKE3 校验+防路径穿越)、SQLite 持久化(Db)
 ├── worker    并发下载：TaskQueue、DownloadEngine(有界并发窗口)、download_and_store
 └── api       HTTP/WS 接口骨架
 src/main.rs   CLI 入口：node / create-site / download / help
@@ -49,14 +49,15 @@ ZRS_EXPECTED_HASH=<64-hex blake3> ./target/debug/zeronet-rs download 127.0.0.1:P
 ## 测试
 
 ```bash
-cargo test          # 30 tests，全绿
+cargo test          # 33 tests，全绿
 ```
 
 | crate | 测试数 | 覆盖 |
 |---|---|---|
-| `kad` | 9 | `cpl`/`xor_distance` 距离度量、路由表 IP 多样性上限、`hash_key` |
+| `kad` | 10 | `cpl`/`xor_distance` 距离度量、路由表 IP 多样性上限、`hash_key`、**路由表 SQLite 持久化 roundtrip** |
 | `content` | 18 | BLAKE3 Merkle 回环、CPython `json.dumps` 逐字节 golden、ZeroNet 官方 ECRECOVER 向量、varint 双分支双 SHA256 golden、sign→recover 自回环 |
 | `worker` | 3 | loopback 真实下载（连接→GetFile→base64 解码→BLAKE3 校验→写盘）、拒绝错误哈希、批量并发 |
+| `storage` | 2 | **HashField + SiteManifest SQLite 持久化 roundtrip** |
 
 ### 跨语言验证（非循环自证）
 
@@ -87,12 +88,14 @@ cargo test          # 30 tests，全绿
 - [x] 内容层：Ed25519+BLAKE3 原生 manifest + ZeroNet 兼容层（读）
 - [x] ZeroNet 兼容层（写）：Secp256k1 可恢复签名器 + 跨语言验证
 - [x] 真实下载通路：TCP + GetFile RPC + BLAKE3 校验 + 落盘 + loopback 集成测试
+- [x] **SQLite 持久化（`rusqlite` bundled）：HashField + SiteManifest + 路由表 落盘，重启不丢索引**
 - [ ] `node` 子命令接通：tokio runtime + TCP 监听 + DHT bootstrap + 调度
 - [ ] DHT 实际走线：`PutValue/GetValue/FindProviders` RPC 经 TCP + 可选 TLS/Noise
-- [ ] `storage` 的 SQLite 持久化（`rusqlite`），重启保留 HashField / 路由表
 - [ ] `api` 的 axum 路由（替代 ZeroNet 949 行 `UiRequest`）
 - [ ] `worker` 接入 `find_providers`，完成"发现→取文件"全链路
 
 ## 许可证
 
 MIT OR Apache-2.0
+
+

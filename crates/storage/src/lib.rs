@@ -5,6 +5,9 @@
 
 pub mod site;
 pub mod hashfield;
+pub mod persist;
+
+pub use persist::{Db, DbError};
 
 use content::SiteManifest;
 use std::path::PathBuf;
@@ -94,4 +97,5 @@ pub enum StorageError {
     #[error("unsafe path: {0}")]
     BadPath(String),
 }
+
 

@@ -12,8 +12,10 @@ pub mod provide;
 pub mod refresh;
 pub mod rt;
 pub mod query;
+pub mod persist;
 
 pub use config::KadConfig;
+pub use persist::{RtDb, DbError as RtDbError};
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -198,5 +200,6 @@ mod tests {
         assert_ne!(a, c);
     }
 }
+
 
 

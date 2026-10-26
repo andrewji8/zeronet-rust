@@ -38,4 +38,10 @@ impl HashField {
     pub fn missing(&self, wanted: &[[u8; 32]]) -> Vec<[u8; 32]> {
         wanted.iter().filter(|h| !self.has(h)).copied().collect()
     }
+
+    /// All stored hashes (for persistence).
+    pub fn all(&self) -> Vec<[u8; 32]> {
+        self.hashes.iter().copied().collect()
+    }
 }
+

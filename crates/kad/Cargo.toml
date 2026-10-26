@@ -10,3 +10,4 @@ tokio = { workspace = true, features = ["macros", "sync", "time", "rt"] }
 futures = { workspace = true }
 async-trait = { workspace = true }
 rand = { workspace = true }
+rusqlite = { workspace = true }
