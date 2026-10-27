@@ -1,4 +1,4 @@
-﻿//! Network transport layer: TCP connections, message framing, DHT RPC.
+//! Network transport layer: TCP connections, message framing, DHT RPC.
 //!
 //! Replaces ZeroNet's `Connection`/`ConnectionServer`/`Peer` modules with
 //! tokio-native sockets (no gevent monkey-patch).
@@ -9,6 +9,7 @@ pub mod rpc;
 pub mod peer;
 pub mod server;
 pub mod dht;
+pub mod secure;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -27,6 +28,15 @@ pub struct PeerConn {
 /// Wire DHT helpers (transport, address book, provider exchange).
 pub use dht::{
     AddressBook, NetQueryTransport, find_providers_over_wire, peer_addr, provide_over_wire,
+};
+
+/// Secure Noise-XX transport API (X25519 + HKDF + ChaCha20-Poly1305).
+///
+/// This is the formal P2P encryption layer that replaces ZeroNet's
+/// `fakedomains` SNI anti-DPI hack: it authenticates both peers (mutual
+/// static keys) and is forward-secret (fresh ephemeral key per session).
+pub use secure::{
+    NoiseIdentity, SecureConn, SecErr, initiator_handshake, responder_handshake, sec_get_file,
 };
 
 /// Manage a pool of peer connections.
@@ -64,9 +74,3 @@ pub enum NetError {
     #[error("protocol: {0}")]
     Protocol(String),
 }
-
-
-
-
-
-

@@ -253,3 +253,46 @@ pub async fn connect_and_bootstrap(
 pub fn peer_addr(addr_book: &AddressBook, id: &PeerId) -> Option<SocketAddr> {
     addr_book.get(id)
 }
+
+
+/// Secure bootstrap: connect to `addr` over a Noise-XX-encrypted channel,
+/// then exchange the same `Handshake` RPC the plaintext path uses. The Noise
+/// handshake authenticates both peers' X25519 identities and gives a
+/// forward-secret channel; the Kademlia `PeerId` (ed25519 site key) is still
+/// carried inside the encrypted `Handshake` body. Returns the learned Kademlia
+/// peer id and the peer's Noise identity (hex).
+pub async fn connect_and_bootstrap_secure(
+    dht: Arc<kad::Kademlia>,
+    addr_book: &AddressBook,
+    identity: &crate::secure::NoiseIdentity,
+    addr: SocketAddr,
+) -> Result<(PeerId, String), String> {
+    use crate::secure::initiator_handshake;
+
+    let stream = TcpStream::connect(addr).await.map_err(|e| e.to_string())?;
+    let (mut conn, remote) = initiator_handshake(stream, identity)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let req = Rpc::Handshake {
+        peer: peer_hex(&dht.self_id),
+        protocol: "zrs/1".to_string(),
+    };
+    let body = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
+    conn.send(&body).await.map_err(|e| e.to_string())?;
+    let resp = conn.recv().await.map_err(|e| e.to_string())?;
+    let v: Value = serde_json::from_slice(&resp).map_err(|e| e.to_string())?;
+    if v.get("ok") != Some(&json!(true)) {
+        return Err(format!(
+            "handshake refused: {}",
+            v.get("error").unwrap_or(&json!("?"))
+        ));
+    }
+    let hex = v.get("self_peer").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let remote_peer = PeerId(hex_to_bytes32(&hex));
+    addr_book.add(remote_peer, addr);
+    if let Ok(mut g) = dht.rt.try_lock() {
+        let _ = g.add_peer(kad::rt::RtPeer { id: remote_peer, ip_group: None });
+    }
+    Ok((remote_peer, remote.hex().to_string()))
+}

@@ -1,4 +1,4 @@
-﻿//! Two real processes start in parallel; each learns the other's peer id.
+//! Two real processes start in parallel; each learns the other's peer id.
 
 use std::process::Stdio;
 use std::time::Duration;
@@ -23,7 +23,7 @@ fn start_node(data_dir: &std::path::Path, listen: &str, bootstrap: &str, max_sec
         .expect("spawn zeronet-rs")
 }
 
-fn wait_and_grep(mut child: std::process::Child, needle: &str) -> String {
+fn wait_and_grep(child: std::process::Child, needle: &str) -> String {
     let out = child
         .wait_with_output()
         .expect("wait")

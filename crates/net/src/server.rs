@@ -1,4 +1,4 @@
-﻿//! Inbound peer RPC server: accepts TCP connections, speaks the
+//! Inbound peer RPC server: accepts TCP connections, speaks the
 //! length-prefixed JSON frame protocol, and dispatches `Rpc` requests.
 //!
 //! This is what makes a node actually *run*: it listens, answers
@@ -122,7 +122,7 @@ async fn handle_conn(
 }
 
 /// Turn a raw request frame into a raw response frame body.
-async fn dispatch(
+pub(crate) async fn dispatch(
     dht: &Kademlia,
     site_root: &Path,
     providers: &Arc<tokio::sync::Mutex<ProviderStore>>,
@@ -236,5 +236,109 @@ fn hex_to_bytes32(s: &str) -> [u8; 32] {
 }
 
 
+/// A running secure inbound server: accepts TCP, performs the Noise-XX
+/// responder handshake, and serves encrypted frames through the same
+/// `dispatch` the plaintext server uses.
+pub struct SecureServerHandle {
+    pub addr: SocketAddr,
+    stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    handle: Option<JoinHandle<()>>,
+}
 
+impl SecureServerHandle {
+    pub async fn stop(mut self) {
+        if let Some(tx) = self.stop_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(h) = self.handle.take() {
+            let _ = h.await;
+        }
+    }
+}
 
+/// Start a secure inbound server on an ephemeral loopback port.
+pub async fn start_secure(
+    dht: Arc<Kademlia>,
+    site_root: PathBuf,
+    providers: Arc<tokio::sync::Mutex<ProviderStore>>,
+    addr_book: Arc<AddressBook>,
+    identity: &crate::secure::NoiseIdentity,
+) -> Result<SecureServerHandle, std::io::Error> {
+    start_secure_at(dht, site_root, providers, addr_book, identity, "127.0.0.1:0".parse().unwrap()).await
+}
+
+/// Start a secure inbound server on `listen`.
+pub async fn start_secure_at(
+    dht: Arc<Kademlia>,
+    site_root: PathBuf,
+    providers: Arc<tokio::sync::Mutex<ProviderStore>>,
+    addr_book: Arc<AddressBook>,
+    identity: &crate::secure::NoiseIdentity,
+    listen: SocketAddr,
+) -> Result<SecureServerHandle, std::io::Error> {
+    let listener = TcpListener::bind(listen).await?;
+    let addr = listener.local_addr()?;
+    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+    let id2 = identity.clone();
+    let handle = tokio::spawn(run_secure_accept(listener, dht, site_root, providers, addr_book, id2, stop_rx));
+    Ok(SecureServerHandle {
+        addr,
+        stop_tx: Some(stop_tx),
+        handle: Some(handle),
+    })
+}
+
+async fn run_secure_accept(
+    listener: TcpListener,
+    dht: Arc<Kademlia>,
+    site_root: PathBuf,
+    providers: Arc<tokio::sync::Mutex<ProviderStore>>,
+    addr_book: Arc<AddressBook>,
+    identity: crate::secure::NoiseIdentity,
+    mut stop_rx: tokio::sync::oneshot::Receiver<()>,
+) {
+    loop {
+        tokio::select! {
+            _ = &mut stop_rx => break,
+            accepted = listener.accept() => {
+                match accepted {
+                    Ok((stream, _peer)) => {
+                        let dht = Arc::clone(&dht);
+                        let root = site_root.clone();
+                        let prov = Arc::clone(&providers);
+                        let ab = Arc::clone(&addr_book);
+                        let id = identity.clone();
+                        tokio::spawn(handle_secure_conn(stream, dht, root, prov, ab, id));
+                    }
+                    Err(_) => continue,
+                }
+            }
+        }
+    }
+}
+
+/// One secure client: run the responder-side Noise-XX handshake, then serve
+/// encrypted request frames until the channel errors or closes.
+async fn handle_secure_conn(
+    stream: tokio::net::TcpStream,
+    dht: Arc<Kademlia>,
+    site_root: PathBuf,
+    providers: Arc<tokio::sync::Mutex<ProviderStore>>,
+    addr_book: Arc<AddressBook>,
+    identity: crate::secure::NoiseIdentity,
+) {
+    let mut conn = match crate::secure::responder_handshake(stream, &identity).await {
+        Ok((c, _)) => c,
+        Err(_) => return,
+    };
+    loop {
+        let req_bytes = match conn.recv().await {
+            Ok(b) => b,
+            Err(_) => break,
+        };
+        let resp = dispatch(&dht, &site_root, &providers, &addr_book, &req_bytes).await;
+        if conn.send(&resp).await.is_err() {
+            break;
+        }
+    }
+}
