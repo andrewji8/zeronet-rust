@@ -34,8 +34,13 @@ fn print_usage() {
     println!("ZeroNet-Rust v0.1.0");
     println!();
     println!("USAGE:");
-    println!("  zeronet-rs node [DIR] [--max-sec N]");
+    println!("  zeronet-rs node [DIR] [--max-sec N] [--listen host:port] [--bootstrap host:port]...");
     println!("                     start a full node (Kademlia + TCP RPC + persistence)");
+    println!("                     bootstrap peers are connected symmetrically and retried");
+    println!("                     until each one succeeds (up to --max-sec); the peer");
+    println!("                     that is bootstrapping in turn does the same, so two");
+    println!("                     nodes started with each other's --listen address will");
+    println!("                     both learn about each other.");
     println!("  zeronet-rs create-site              generate a new site keypair");
     println!("  zeronet-rs download <host:port> <site> <path>");
     println!("                     fetch a file from a peer (BLAKE3-checked)");
@@ -46,12 +51,36 @@ async fn run_node(args: &[String]) {
     // --- Parse args ---
     let mut data_dir = PathBuf::from(".zrs-node");
     let mut max_sec = 15u64; // default demo duration
+    let mut listen: Option<std::net::SocketAddr> = None;
+    let mut bootstrap: Vec<std::net::SocketAddr> = Vec::new();
     let mut i = 2;
     while i < args.len() {
         match args[i].as_str() {
             "--max-sec" => {
                 if i + 1 < args.len() {
                     max_sec = args[i + 1].parse().unwrap_or(15);
+                    i += 1;
+                }
+            }
+            "--listen" => {
+                if i + 1 < args.len() {
+                    listen = Some(args[i + 1].parse().unwrap_or_else(|_| {
+                        eprintln!("bad --listen addr: {}", args[i + 1]);
+                        std::process::exit(2);
+                    }));
+                    i += 1;
+                }
+            }
+            "--bootstrap" => {
+                // repeatable: each subsequent --bootstrap value is parsed
+                if i + 1 < args.len() {
+                    match args[i + 1].parse() {
+                        Ok(a) => bootstrap.push(a),
+                        Err(_) => {
+                            eprintln!("bad --bootstrap addr: {}", args[i + 1]);
+                            std::process::exit(2);
+                        }
+                    }
                     i += 1;
                 }
             }
@@ -106,15 +135,73 @@ async fn run_node(args: &[String]) {
     let dht_arc = Arc::new(dht);
     let providers = Arc::new(tokio::sync::Mutex::new(kad::ProviderStore::new()));
     let addr_book = Arc::new(net::AddressBook::new());
-    let server_handle = net_server::start(
+
+    // Bind the inbound RPC server. If the user passed --listen, use that
+    // address; otherwise pick an ephemeral loopback port.
+    let listen_addr = listen.unwrap_or_else(|| "127.0.0.1:0".parse().unwrap());
+    let server_handle = net_server::start_at(
         dht_arc.clone(),
         data_dir.clone(),
         providers.clone(),
         addr_book.clone(),
+        listen_addr,
     )
     .await
     .expect("failed to bind the inbound server");
-    println!("  inbound RPC:     http/1 + JSON frames on {}", server_handle.addr);
+    println!(
+        "  inbound RPC:     JSON frames on {} (listen={})",
+        server_handle.addr, listen_addr
+    );
+
+    // If the user gave bootstrap peers, connect to each of them now AND
+    // periodically (in case the peer started later, or the first attempt
+    // was transiently refused).
+    if !bootstrap.is_empty() {
+        let n = bootstrap.len();
+        println!(
+            "  bootstrap peers: {} ({} each, retried every 10s until --max-sec)",
+            n,
+            bootstrap
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        let mut handles = Vec::new();
+        for (idx, baddr) in bootstrap.iter().enumerate() {
+            let dht_arc = dht_arc.clone();
+            let addr_book = addr_book.clone();
+            let baddr = *baddr;
+            let label = format!("b{idx}");
+            handles.push(tokio::spawn(async move {
+                loop {
+                    match net::dht::connect_and_bootstrap(dht_arc.clone(), &addr_book, baddr).await {
+                        Ok(remote) => {
+                            println!(
+                                "  [{}] bootstrap ok: learned peer {:02x}{}.. at {}",
+                                label,
+                                remote.0[0],
+                                remote.0[1],
+                                baddr
+                            );
+                            return Ok::<(), String>(());
+                        }
+                        Err(e) => {
+                            println!(
+                                "  [{}] bootstrap {} failed: {e} (retrying in 10s)",
+                                label, baddr
+                            );
+                            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                        }
+                    }
+                }
+            }));
+        }
+        // Don't block on bootstrap; the node keeps running. We wait on the
+        // `max_sec` sleep and let them finish (or be cancelled) naturally.
+        let _ = handles;
+    }
 
     // --- Run for `max_sec`, then flush + stop ---
     tokio::time::sleep(tokio::time::Duration::from_secs(max_sec)).await;
@@ -181,4 +268,5 @@ fn hex_decode(s: &str, out: &mut [u8; 32]) {
             .unwrap_or_else(|_| panic!("bad hex in ZRS_EXPECTED_HASH"));
     }
 }
+
 

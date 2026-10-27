@@ -39,16 +39,28 @@ impl ServerHandle {
     }
 }
 
-/// Start an inbound RPC server serving local sites under `site_root`,
-/// answering `GetClosestPeers` from the Kademlia routing table and
-/// `PutValue`/`FindProviders` from the shared provider store.
+/// Start an inbound RPC server on an ephemeral loopback port
+/// (`127.0.0.1:0`). Convenience wrapper around [`start_at`].
 pub async fn start(
     dht: Arc<Kademlia>,
     site_root: PathBuf,
     providers: Arc<tokio::sync::Mutex<ProviderStore>>,
     addr_book: Arc<AddressBook>,
 ) -> Result<ServerHandle, std::io::Error> {
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    start_at(dht, site_root, providers, addr_book, "127.0.0.1:0".parse().unwrap()).await
+}
+
+/// Start an inbound RPC server on `listen`, serving local sites under
+/// `site_root`, answering `GetClosestPeers` from the Kademlia routing table
+/// and `PutValue`/`FindProviders` from the shared provider store.
+pub async fn start_at(
+    dht: Arc<Kademlia>,
+    site_root: PathBuf,
+    providers: Arc<tokio::sync::Mutex<ProviderStore>>,
+    addr_book: Arc<AddressBook>,
+    listen: SocketAddr,
+) -> Result<ServerHandle, std::io::Error> {
+    let listener = TcpListener::bind(listen).await?;
     let addr = listener.local_addr()?;
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
     let handle = tokio::spawn(run_accept(listener, dht, site_root, providers, addr_book, stop_rx));
@@ -222,5 +234,7 @@ fn hex_to_bytes32(s: &str) -> [u8; 32] {
     }
     out
 }
+
+
 
 
