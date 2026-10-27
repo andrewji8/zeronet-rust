@@ -1,4 +1,4 @@
-﻿# Rust build output
+# Rust build output
 /target
 
 # Editor / OS
@@ -9,3 +9,6 @@
 
 # Test temp dirs (created under system temp, but ignore any local leftovers)
 *.tmp
+
+# stray test output
+testout*.txt
