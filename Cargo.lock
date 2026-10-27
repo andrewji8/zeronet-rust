@@ -1486,7 +1486,9 @@ name = "zeronet-rs"
 version = "0.1.0"
 dependencies = [
  "api",
+ "blake3",
  "content",
+ "ed25519-dalek",
  "futures",
  "kad",
  "net",

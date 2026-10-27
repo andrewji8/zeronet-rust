@@ -1,15 +1,17 @@
 //! ZeroNet-Rust: Kademlia DHT + Ed25519/BLAKE3 content addressing.
 //!
-//! CLI entry point: start node, create site, download a file.
+//! CLI entry point: start node, create site, publish a site, download a file.
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use content::sign::Identity;
 use kad::{KadConfig, Kademlia, PeerId};
 use net::server as net_server;
 use net::NoiseIdentity;
+
+mod publish;
 
 #[tokio::main]
 async fn main() {
@@ -22,10 +24,11 @@ async fn main() {
         "create-site" => {
             let id = Identity::generate();
             let hex = |b: &[u8]| b.iter().map(|x| format!("{:02x}", x)).collect::<String>();
-            println!("site address: {}", hex(&id.site_key()));
-            println!("private key:  {}", hex(&id.secret_bytes()));
+            println!("site address:  {}", hex(&id.site_key()));
+            println!("private key:   {}", hex(&id.secret_bytes()));
             println!("save the private key now - you will need it to sign the site!");
         }
+        "publish" => run_publish(&args).await,
         "download" => run_download(&args).await,
         _ => print_usage(),
     }
@@ -41,15 +44,355 @@ fn print_usage() {
     println!(
         "                     start a full node (Kademlia + TCP RPC + persistence + axum API)"
     );
-    println!("                     --secure-listen also opens a Noise-XX encrypted RPC port");
-    println!("                     (X25519 + HKDF + ChaCha20-Poly1305, the formal encryption");
-    println!("                     layer that replaces ZeroNet fakedomains SNI anti-DPI).");
-    println!("                     --secure-bootstrap connects to a peer over that encrypted");
-    println!("                     port and exchanges the Handshake inside the Noise channel.");
-    println!("  zeronet-rs create-site              generate a new site keypair");
+    println!("  zeronet-rs create-site");
+    println!("                     generate a new ed25519 site keypair");
+    println!("  zeronet-rs publish <site-dir> (--secret <64hex> | --wif <WIF>)");
+    println!("                     sign the site manifest (BLAKE3 + Ed25519, self-checked) and");
+    println!("                     persist manifest.json + storage.db; with --announce, also");
+    println!("                     start the node and broadcast the provider over the DHT.");
     println!("  zeronet-rs download <host:port> <site> <path>");
     println!("                     fetch a file from a peer (BLAKE3-checked)");
     println!("  zeronet-rs help                     show this message");
+}
+
+/// The publish path: sign the manifest, persist it locally, and (optionally)
+/// announce + serve to the network.
+async fn run_publish(args: &[String]) {
+    let mut site_dir = PathBuf::from(".");
+    let mut secret_hex: Option<String> = None;
+    let mut wif: Option<String> = None;
+    let mut max_sec = 10u64;
+    let mut listen: Option<SocketAddr> = None;
+    let mut secure_listen: Option<SocketAddr> = None;
+    let mut bootstrap: Vec<SocketAddr> = Vec::new();
+    let mut secure_bootstrap: Vec<SocketAddr> = Vec::new();
+    let mut want_announce = false;
+
+    let mut i = 2;
+    while i < args.len() {
+        let a = args[i].as_str();
+        match a {
+            "--secret" => {
+                if i + 1 < args.len() {
+                    secret_hex = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--wif" => {
+                if i + 1 < args.len() {
+                    wif = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--max-sec" => {
+                if i + 1 < args.len() {
+                    max_sec = args[i + 1].parse().unwrap_or(10);
+                    i += 1;
+                }
+            }
+            "--listen" => {
+                if i + 1 < args.len() {
+                    listen = Some(parse_addr(&args[i + 1], a));
+                    i += 1;
+                }
+            }
+            "--secure-listen" => {
+                if i + 1 < args.len() {
+                    secure_listen = Some(parse_addr(&args[i + 1], a));
+                    i += 1;
+                }
+            }
+            "--bootstrap" => {
+                if i + 1 < args.len() {
+                    bootstrap.push(parse_addr(&args[i + 1], a));
+                    i += 1;
+                }
+            }
+            "--secure-bootstrap" => {
+                if i + 1 < args.len() {
+                    secure_bootstrap.push(parse_addr(&args[i + 1], a));
+                    i += 1;
+                }
+            }
+            "--announce" => {
+                want_announce = true;
+            }
+            s => {
+                site_dir = PathBuf::from(s);
+            }
+        }
+        i += 1;
+    }
+
+    // ---- 1) build + self-verify the signed manifest (ed25519 native path) ----
+    match &secret_hex {
+        Some(hex) => {
+            let bytes = hex_decode32(hex, "--secret");
+            let identity = Identity::from_secret(&bytes);
+            let manifest = match publish::build_site_manifest(
+                &site_dir,
+                identity.site_key(),
+                &identity.signing_key,
+            ) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("publish failed: {e}");
+                    std::process::exit(1);
+                }
+            };
+            persist_manifest(&site_dir, &identity, &manifest);
+            println!(
+                "site {} signed with {} files; manifest self-verified",
+                short_hex(&identity.site_key()),
+                manifest.file_count
+            );
+
+            // ---- 2) optional announce over the DHT ----
+            if want_announce {
+                announce_site(
+                    site_dir.clone(),
+                    &identity,
+                    manifest,
+                    max_sec,
+                    listen,
+                    secure_listen,
+                    bootstrap,
+                    secure_bootstrap,
+                )
+                .await;
+            }
+        }
+        _ => match &wif {
+            Some(w) => {
+                // ZeroNet-compatible: sign a content.json with the WIF key and persist it.
+                let key = match content::secp::ZeronetKey::from_wif(w) {
+                    Ok(k) => k,
+                    Err(e) => {
+                        eprintln!("bad WIF: {e}");
+                        std::process::exit(1);
+                    }
+                };
+                let source = site_dir.join("content.json");
+                let content_json = match std::fs::read(&source) {
+                    Ok(b) => b,
+                    Err(_) => {
+                        eprintln!(
+                            "--wif publish expects a content.json in {}",
+                            source.display()
+                        );
+                        std::process::exit(2);
+                    }
+                };
+                let value: serde_json::Value = match serde_json::from_slice(&content_json) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("content.json is not valid JSON: {e}");
+                        std::process::exit(1);
+                    }
+                };
+                let signed = match key.sign_content(&value) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("signing failed: {e}");
+                        std::process::exit(1);
+                    }
+                };
+                std::fs::write(site_dir.join("content.signed.json"), &signed).unwrap_or_else(|e| {
+                    eprintln!("failed to write content.signed.json: {e}");
+                    std::process::exit(1);
+                });
+                println!(
+                    "ZeroNet site {} signed (Secp256k1); wrote content.signed.json",
+                    key.address()
+                );
+            }
+            None => {
+                eprintln!("publish: pass --secret <64-hex ed25519 key> or --wif <ZeroNet WIF>");
+                std::process::exit(2);
+            }
+        },
+    }
+}
+
+/// Announce the site's provider over the DHT, then keep serving it for
+/// `max_sec` so other nodes can discover + download.
+#[allow(clippy::too_many_arguments)]
+async fn announce_site(
+    site_dir: PathBuf,
+    identity: &Identity,
+    manifest: content::SiteManifest,
+    max_sec: u64,
+    listen: Option<SocketAddr>,
+    secure_listen: Option<SocketAddr>,
+    bootstrap: Vec<SocketAddr>,
+    secure_bootstrap: Vec<SocketAddr>,
+) {
+    let data_dir = site_dir.clone();
+    let storage_db_path = data_dir.join("storage.db");
+    let noise_id_path = data_dir.join("noise_identity.bin");
+    tokio::fs::create_dir_all(&data_dir).await.ok();
+
+    // Persist the manifest into the site storage db.
+    if let Ok(db) = storage::Db::open(&storage_db_path) {
+        let hashes: Vec<[u8; 32]> = manifest.files.iter().map(|f| f.hash).collect();
+        let _ = db.save_hashfield(&hashes);
+        let _ = db.save_site_manifest(&manifest.site_key, &manifest);
+    }
+
+    // Reconstruct a Kademlia node bound to the site key.
+    let cfg = KadConfig::light_node();
+    let self_peer = PeerId(identity.site_key());
+    let dht = Arc::new(Kademlia::new(self_peer, cfg.clone()));
+    let providers = Arc::new(tokio::sync::Mutex::new(kad::ProviderStore::new()));
+    let addr_book = Arc::new(net::AddressBook::new());
+
+    // Start inbound servers (plaintext + optional secure).
+    let listen_addr = listen.unwrap_or_else(|| "127.0.0.1:0".parse().unwrap());
+    let server_handle = net_server::start_at(
+        dht.clone(),
+        site_dir.clone(),
+        providers.clone(),
+        addr_book.clone(),
+        listen_addr,
+    )
+    .await
+    .expect("failed to bind the announce server");
+    println!("  announcing:      plaintext RPC on {}", server_handle.addr);
+
+    let mut secure_server_handle: Option<net_server::SecureServerHandle> = None;
+    let noise_id = NoiseIdentity::load_or_new(&noise_id_path).unwrap_or_else(|e| {
+        eprintln!("failed to load noise identity: {e}");
+        std::process::exit(1);
+    });
+    if let Some(sl) = secure_listen {
+        match net_server::start_secure_at(
+            dht.clone(),
+            site_dir.clone(),
+            providers.clone(),
+            addr_book.clone(),
+            &noise_id,
+            sl,
+        )
+        .await
+        {
+            Ok(h) => {
+                println!("  announcing:      Noise-XX encrypted RPC on {}", h.addr);
+                secure_server_handle = Some(h);
+            }
+            Err(e) => {
+                eprintln!("failed to bind the secure announce server: {e}");
+            }
+        }
+    }
+
+    // Bootstrap peers (both plaintext and secure) so the provider record can
+    // actually reach someone.
+    for baddr in &bootstrap {
+        let _ = net::dht::connect_and_bootstrap(dht.clone(), &addr_book, *baddr).await;
+    }
+    for baddr in &secure_bootstrap {
+        let _ = net::dht::connect_and_bootstrap_secure(dht.clone(), &addr_book, &noise_id, *baddr)
+            .await;
+    }
+
+    // Announce: register this node as a provider of the site's content key.
+    let key = publish::site_content_key(&identity.site_key());
+    println!(
+        "  content key:     {} ({} files, {} bytes)",
+        short_hex(&key),
+        manifest.file_count,
+        manifest.total_size
+    );
+    if addr_book.is_empty() {
+        eprintln!("warning: no peers reachable yet; the provider record is only stored locally.");
+        eprintln!("         pass --bootstrap / --secure-bootstrap so other nodes can find you.");
+    }
+    // Plaintext announce.
+    let _ = net::dht::provide_over_wire(
+        &providers,
+        &addr_book,
+        &key,
+        self_peer,
+        addr_book.len().max(1),
+    )
+    .await;
+    // Secure announce (no-op if the secure server wasn't started).
+    if secure_server_handle.is_some() || !secure_bootstrap.is_empty() {
+        let _ = net::dht::provide_over_wire_secure(
+            &providers,
+            &addr_book,
+            &noise_id,
+            &key,
+            self_peer,
+            addr_book.len().max(1),
+        )
+        .await;
+    }
+
+    // Keep serving for `max_sec`.
+    println!("serving the site for {max_sec}s (other nodes can now discover + download it)...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(max_sec)).await;
+
+    if let Some(h) = secure_server_handle {
+        let _ = h.stop().await;
+    }
+    let _ = server_handle.stop().await;
+    println!("announce window closed");
+}
+
+fn persist_manifest(site_dir: &Path, identity: &Identity, manifest: &content::SiteManifest) {
+    // Persist into the site's storage.db so restarts keep the index.
+    if let Ok(db) = storage::Db::open(site_dir.join("storage.db")) {
+        let hashes: Vec<[u8; 32]> = manifest.files.iter().map(|f| f.hash).collect();
+        let _ = db.save_hashfield(&hashes);
+        let _ = db.save_site_manifest(&manifest.site_key, manifest);
+        println!(
+            "  persisted:        {}",
+            site_dir.join("storage.db").display()
+        );
+    }
+    // Also write a human-readable manifest.json next to the site files.
+    if let Ok(json) = serde_json::to_string_pretty(manifest) {
+        let out = site_dir.join("manifest.json");
+        if std::fs::write(&out, json).is_ok() {
+            println!("  persisted:        {}", out.display());
+        }
+    }
+    let _ = identity;
+}
+
+/// Parse a required `host:port` argument, exiting with a clear message on error.
+fn parse_addr(s: &str, flag: &str) -> SocketAddr {
+    match s.parse() {
+        Ok(a) => a,
+        Err(_) => {
+            eprintln!("bad {flag} address: {s}");
+            std::process::exit(2);
+        }
+    }
+}
+
+fn hex_decode32(s: &str, flag: &str) -> [u8; 32] {
+    if s.len() != 64 {
+        eprintln!(
+            "{flag} must be 64 hex chars (32 bytes), got {} chars",
+            s.len()
+        );
+        std::process::exit(2);
+    }
+    let mut out = [0u8; 32];
+    for i in 0..32 {
+        out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap_or_else(|_| {
+            eprintln!("{flag} has invalid hex at byte {i}");
+            std::process::exit(2);
+        });
+    }
+    out
+}
+
+fn short_hex(b: &[u8; 32]) -> String {
+    let s = b.iter().map(|x| format!("{:02x}", x)).collect::<String>();
+    s.chars().take(16).collect()
 }
 
 async fn run_node(args: &[String]) {
@@ -386,7 +729,12 @@ async fn run_download(args: &[String]) {
     let expected = match std::env::var("ZRS_EXPECTED_HASH") {
         Ok(h) if h.len() == 64 => {
             let mut arr = [0u8; 32];
-            hex_decode(&h, &mut arr);
+            for i in 0..32 {
+                arr[i] = u8::from_str_radix(&h[i * 2..i * 2 + 2], 16).unwrap_or_else(|_| {
+                    eprintln!("bad hex in ZRS_EXPECTED_HASH");
+                    std::process::exit(2);
+                });
+            }
             arr
         }
         _ => {
@@ -402,12 +750,5 @@ async fn run_download(args: &[String]) {
             eprintln!("download failed: {e}");
             std::process::exit(1);
         }
-    }
-}
-
-fn hex_decode(s: &str, out: &mut [u8; 32]) {
-    for i in 0..32 {
-        out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
-            .unwrap_or_else(|_| panic!("bad hex in ZRS_EXPECTED_HASH"));
     }
 }

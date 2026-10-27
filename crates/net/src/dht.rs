@@ -385,3 +385,36 @@ async fn secure_rpc_roundtrip(
     let resp = conn.recv().await.map_err(|e| e.to_string())?;
     serde_json::from_slice(&resp).map_err(|e| e.to_string())
 }
+
+/// Secure variant of [`provide_over_wire`]: announce `provider` as a
+/// provider of `content_key` to the known peers, each `PutValue` sent over
+/// its own Noise-XX handshake. The remote side must run a secure server
+/// (`net::server::start_secure`).
+pub async fn provide_over_wire_secure(
+    local_store: &Arc<tokio::sync::Mutex<kad::ProviderStore>>,
+    addr_book: &AddressBook,
+    identity: &crate::secure::NoiseIdentity,
+    content_key: &[u8],
+    provider: PeerId,
+    count: usize,
+) -> Result<(), String> {
+    let key32 = kad::hash_key(content_key);
+    // Local accounting: a provider always knows it provides its content.
+    local_store.lock().await.add(key32, provider);
+    let key = key32.to_vec();
+
+    let mut targets = addr_book.drain();
+    targets.truncate(count.max(1));
+    if targets.is_empty() {
+        return Err("no peers to provide to".into());
+    }
+    let record = peer_hex(&provider);
+    for (_peer, addr) in targets {
+        let req = Rpc::PutValue {
+            key: key.clone(),
+            record: record.clone().into_bytes(),
+        };
+        let _ = secure_rpc_roundtrip(addr, identity, &req).await;
+    }
+    Ok(())
+}
