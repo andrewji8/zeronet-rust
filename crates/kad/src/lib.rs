@@ -1,4 +1,4 @@
-﻿//! Kademlia DHT discovery layer (Amino-tuned parameters).
+//! Kademlia DHT discovery layer (Amino-tuned parameters).
 //!
 //! Design reference:
 //! - libp2p/go-libp2p-kad-dht: k=20, alpha=10, beta=3, record age 48h,
@@ -7,15 +7,15 @@
 //! Public API: `Kademlia::new`, `lookup_peers`, `find_providers`.
 
 pub mod config;
-pub mod record;
+pub mod persist;
 pub mod provide;
+pub mod query;
+pub mod record;
 pub mod refresh;
 pub mod rt;
-pub mod query;
-pub mod persist;
 
 pub use config::KadConfig;
-pub use persist::{RtDb, DbError as RtDbError};
+pub use persist::{DbError as RtDbError, RtDb};
 pub use provide::ProviderStore;
 
 use std::collections::VecDeque;
@@ -47,7 +47,9 @@ impl std::fmt::Display for PeerId {
 pub fn cpl(a: &PeerId, b: &PeerId) -> u32 {
     let mut n = 0u32;
     for i in 0..32 {
-        if a.0[i] == b.0[i] { n += 8; } else {
+        if a.0[i] == b.0[i] {
+            n += 8;
+        } else {
             let x = a.0[i] ^ b.0[i];
             n += x.leading_zeros();
             return n;
@@ -127,7 +129,9 @@ impl Kademlia {
         target: &PeerId,
         transport: &T,
     ) -> Vec<PeerId> {
-        query::lookup::run_lookup(self, target, transport).await.closest
+        query::lookup::run_lookup(self, target, transport)
+            .await
+            .closest
     }
 
     /// Find providers of a content key (multihash of site address).
@@ -139,7 +143,7 @@ impl Kademlia {
 
 /// Key hash used as the DHT lookup target for providers.
 pub fn hash_key(key: &[u8]) -> [u8; 32] {
-    use std::hash::{Hasher as StdHasher, DefaultHasher};
+    use std::hash::{DefaultHasher, Hasher as StdHasher};
     let mut h = DefaultHasher::new();
     h.write(key);
     let digest = h.finish();
@@ -157,7 +161,10 @@ pub struct LruCache<T> {
 
 impl<T> LruCache<T> {
     pub fn with_capacity(cap: usize) -> Self {
-        Self { items: VecDeque::new(), cap }
+        Self {
+            items: VecDeque::new(),
+            cap,
+        }
     }
 
     pub fn push(&mut self, item: T) {
@@ -179,11 +186,6 @@ impl<T> LruCache<T> {
         self.items.iter()
     }
 }
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -225,7 +227,3 @@ mod tests {
         assert_ne!(a, c);
     }
 }
-
-
-
-

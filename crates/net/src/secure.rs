@@ -9,9 +9,12 @@
 //!
 //! Design reference:
 //! - The Noise Protocol Framework (revision 34), section 7.5 (XX pattern):
-//!       c -> e
-//!       c <- e, ee, s, se
-//!       c -> s, se
+//!
+//!   ```text
+//!   c -> e
+//!   c <- e, ee, s, se
+//!   c -> s, se
+//!   ```
 //!   `ee`/`se` are X25519 Diffie-Hellman reductions mixed into the chaining
 //!   key (HKDF-HMAC-SHA256); `s` public keys are AEAD-encrypted under the
 //!   current chaining key with the current handshake hash as associated data.
@@ -121,6 +124,12 @@ impl NoiseIdentity {
     }
 }
 
+impl Default for NoiseIdentity {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The peer identity learned from a completed handshake.
 pub struct NoiseRemoteId {
     pk: [u8; 32],
@@ -183,7 +192,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> SecureConn<S> {
 // ---------------------------------------------------------------------------
 
 fn bump(n: u64) -> Result<u64, SecErr> {
-    n.checked_add(1).ok_or_else(|| SecErr::Handshake("nonce exhausted".into()))
+    n.checked_add(1)
+        .ok_or_else(|| SecErr::Handshake("nonce exhausted".into()))
 }
 
 fn random_scalar() -> [u8; 32] {
@@ -297,7 +307,9 @@ where
     // read m2: er (32) + ct_s (48) = 80 bytes.
     let mut m2 = [0u8; 80];
     stream.read_exact(&mut m2).await?;
-    let er_pk: [u8; 32] = m2[0..32].try_into().map_err(|_| SecErr::Handshake("m2 short".into()))?;
+    let er_pk: [u8; 32] = m2[0..32]
+        .try_into()
+        .map_err(|_| SecErr::Handshake("m2 short".into()))?;
     let ct_s = &m2[32..80];
     // token e
     h = mix_hash(h, &er_pk);
@@ -358,7 +370,7 @@ where
     // read m1: e.
     let mut m1 = [0u8; 32];
     stream.read_exact(&mut m1).await?;
-    let ei_pk: [u8; 32] = m1.try_into().unwrap();
+    let ei_pk: [u8; 32] = m1;
     h = mix_hash(h, &ei_pk);
 
     // m2: e, ee, s, se.
@@ -430,7 +442,9 @@ pub async fn sec_get_file(
     let resp = conn.recv().await?;
     let f: crate::rpc::FileResponse = serde_json::from_slice(&resp)?;
     if !f.ok {
-        return Err(SecErr::Handshake(f.error.unwrap_or_else(|| "peer refused".into())));
+        return Err(SecErr::Handshake(
+            f.error.unwrap_or_else(|| "peer refused".into()),
+        ));
     }
     use base64::Engine;
     base64::engine::general_purpose::STANDARD
@@ -456,7 +470,10 @@ mod tests {
         // tamper the ciphertext -> auth must fail
         let mut bad = ct.clone();
         bad[0] ^= 0x01;
-        assert!(aead_dec(&k, 0, b"", &bad).is_err(), "tamper must be rejected");
+        assert!(
+            aead_dec(&k, 0, b"", &bad).is_err(),
+            "tamper must be rejected"
+        );
 
         // wrong key -> auth must fail
         let wrong = [0x5bu8; 32];

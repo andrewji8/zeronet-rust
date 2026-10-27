@@ -1,4 +1,4 @@
-﻿//! Download + verify + store path.
+//! Download + verify + store path.
 //!
 //! Ties together: `net::peer` (fetch over TCP), `storage::store_verified`
 //! (BLAKE3 check + path-traversal guard + write). This is the "real"
@@ -61,15 +61,15 @@ pub async fn download_via_dht(
     root: &Path,
     provider_count: u32,
 ) -> Result<std::path::PathBuf, DownloadError> {
-    let providers = net::dht::find_providers_over_wire(addr_book, content_key, provider_count).await;
+    let providers =
+        net::dht::find_providers_over_wire(addr_book, content_key, provider_count).await;
     if providers.is_empty() {
         return Err(DownloadError::NoProvider);
     }
 
     let mut last_err = None;
     for (peer_id, known_addr) in &providers {
-        let addr = (*known_addr)
-            .or_else(|| net::dht::peer_addr(addr_book, peer_id));
+        let addr = (*known_addr).or_else(|| net::dht::peer_addr(addr_book, peer_id));
         let addr = match addr {
             Some(a) => a,
             None => continue,
@@ -103,4 +103,3 @@ pub fn stage_of(err: &DownloadError) -> &'static str {
         DownloadError::NoProvider => "discovery",
     }
 }
-

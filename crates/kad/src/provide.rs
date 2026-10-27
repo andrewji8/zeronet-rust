@@ -1,4 +1,4 @@
-﻿//! Provider records (FindProviders / Provide).
+//! Provider records (FindProviders / Provide).
 
 use crate::{Kademlia, PeerId};
 
@@ -49,9 +49,11 @@ impl ProviderStore {
 pub async fn find_providers(dht: &Kademlia, target: &PeerId, _content_key: &[u8]) -> Vec<PeerId> {
     // Without a live transport we can only report peers from our own table;
     // the real FindProviders path issues GetProviders RPCs (see net crate).
-    dht.rt.lock().await.nearest_peers(target, dht.config.bucket_size as usize)
+    dht.rt
+        .lock()
+        .await
+        .nearest_peers(target, dht.config.bucket_size as usize)
         .into_iter()
         .map(|p| p.id)
         .collect()
 }
-

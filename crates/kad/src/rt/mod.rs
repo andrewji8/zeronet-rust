@@ -1,4 +1,4 @@
-﻿//! Routing table: k-buckets keyed by common prefix length (big-endian peer ids),
+//! Routing table: k-buckets keyed by common prefix length (big-endian peer ids),
 //! LRU eviction on overflow, and IP-diversity capping (Amino).
 
 use std::collections::{HashMap, VecDeque};
@@ -67,7 +67,11 @@ impl RoutingTable {
         });
 
         if let Some(group) = peer.ip_group {
-            let same_group = bucket.peers.iter().filter(|p| p.ip_group == Some(group)).count();
+            let same_group = bucket
+                .peers
+                .iter()
+                .filter(|p| p.ip_group == Some(group))
+                .count();
             if same_group >= self.config.max_peers_per_ip_group_per_cpl as usize {
                 return false;
             }
@@ -99,7 +103,7 @@ impl RoutingTable {
             }
         }
         let mut entries: Vec<(PeerId, (u128, u128))> = seen.into_iter().collect();
-        entries.sort_by(|a, b| a.1.cmp(&b.1));
+        entries.sort_by_key(|e| e.1);
         let mut out: Vec<RtPeer> = Vec::new();
         for (id, _) in entries.into_iter().take(n) {
             if let Some(p) = self.find(&id) {
@@ -131,8 +135,6 @@ impl RoutingTable {
         self.buckets.values().map(|b| b.id).collect()
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -170,7 +172,10 @@ mod tests {
         let me = pid(&[0, 0, 0, 0]);
         let mut rt = RoutingTable::new(me, KadConfig::default());
         let p = pid(&[0x10, 0, 0, 0]);
-        assert!(rt.add_peer(RtPeer { id: p, ip_group: None }));
+        assert!(rt.add_peer(RtPeer {
+            id: p,
+            ip_group: None
+        }));
         assert!(rt.find(&p).is_some());
         assert_eq!(rt.len(), 1);
     }
@@ -178,16 +183,27 @@ mod tests {
     #[test]
     fn ip_diversity_cap_enforced() {
         let me = pid(&[0, 0, 0, 0]);
-        let cfg = KadConfig { max_peers_per_ip_group_per_cpl: 2, ..KadConfig::default() };
+        let cfg = KadConfig {
+            max_peers_per_ip_group_per_cpl: 2,
+            ..KadConfig::default()
+        };
         let mut rt = RoutingTable::new(me, cfg);
         // Same CPL (same high byte) and same IP group.
         let p1 = pid(&[0x10, 0, 0, 0]);
         let p2 = pid(&[0x11, 0, 0, 0]);
         let p3 = pid(&[0x12, 0, 0, 0]);
-        assert!(rt.add_peer(RtPeer { id: p1, ip_group: Some(1) }));
-        assert!(rt.add_peer(RtPeer { id: p2, ip_group: Some(1) }));
+        assert!(rt.add_peer(RtPeer {
+            id: p1,
+            ip_group: Some(1)
+        }));
+        assert!(rt.add_peer(RtPeer {
+            id: p2,
+            ip_group: Some(1)
+        }));
         // Third peer from same IP group in the same bucket is rejected.
-        assert!(!rt.add_peer(RtPeer { id: p3, ip_group: Some(1) }));
+        assert!(!rt.add_peer(RtPeer {
+            id: p3,
+            ip_group: Some(1)
+        }));
     }
 }
-

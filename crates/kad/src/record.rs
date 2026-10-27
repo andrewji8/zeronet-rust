@@ -1,4 +1,4 @@
-﻿//! A signed record stored in the DHT (PutValue / IPNS analog).
+//! A signed record stored in the DHT (PutValue / IPNS analog).
 
 use super::PeerId;
 use serde::{Deserialize, Serialize};
@@ -16,8 +16,20 @@ pub struct Record {
 }
 
 impl Record {
-    pub fn new(key: Vec<u8>, value: Vec<u8>, publisher: PeerId, timestamp: u64, signature: Vec<u8>) -> Self {
-        Self { key, value, publisher, timestamp, signature }
+    pub fn new(
+        key: Vec<u8>,
+        value: Vec<u8>,
+        publisher: PeerId,
+        timestamp: u64,
+        signature: Vec<u8>,
+    ) -> Self {
+        Self {
+            key,
+            value,
+            publisher,
+            timestamp,
+            signature,
+        }
     }
 
     /// Freshness check against `max_record_age`.
@@ -25,4 +37,3 @@ impl Record {
         now_unix.saturating_sub(self.timestamp) < max_age.as_secs()
     }
 }
-

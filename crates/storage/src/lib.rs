@@ -1,11 +1,11 @@
-﻿//! Local storage layer: site directories, hash index, content.json cache.
+//! Local storage layer: site directories, hash index, content.json cache.
 //!
 //! Replaces ZeroNet's `SiteStorage` + `ContentDbDict` with typed,
 //! testable modules.
 
-pub mod site;
 pub mod hashfield;
 pub mod persist;
+pub mod site;
 
 pub use persist::{Db, DbError};
 
@@ -30,7 +30,11 @@ impl SiteStore {
 
     /// Write a file into the site, verifying it against the manifest.
     pub async fn write_file(&self, rel_path: &str, data: &[u8]) -> Result<(), StorageError> {
-        let entry = self.manifest.files.iter().find(|f| f.path == rel_path)
+        let entry = self
+            .manifest
+            .files
+            .iter()
+            .find(|f| f.path == rel_path)
             .ok_or(StorageError::FileNotInManifest(rel_path.to_string()))?;
         if !content::merkle::verify_file(entry, data) {
             return Err(StorageError::HashMismatch(rel_path.to_string()));
@@ -97,5 +101,3 @@ pub enum StorageError {
     #[error("unsafe path: {0}")]
     BadPath(String),
 }
-
-

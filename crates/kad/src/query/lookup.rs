@@ -1,9 +1,9 @@
-﻿//! Kademlia lookup with follow-up pass.
+//! Kademlia lookup with follow-up pass.
 
 use std::collections::VecDeque;
 
-use crate::{KadConfig, Kademlia, PeerId};
 use super::peerset::{PeerState, QueryPeerset};
+use crate::{KadConfig, Kademlia, PeerId};
 
 /// A pluggable transport that queries one peer and returns the closer peers it knows.
 pub trait QueryTransport: Send + Sync {
@@ -27,7 +27,11 @@ pub struct LookupResult {
 ///
 /// `transport` is used to issue the per-peer queries. The routing table provides the
 /// seed peers; discovered closer peers are tracked in a `QueryPeerset`.
-pub async fn run_lookup<T: QueryTransport>(dht: &Kademlia, target: &PeerId, transport: &T) -> LookupResult {
+pub async fn run_lookup<T: QueryTransport>(
+    dht: &Kademlia,
+    target: &PeerId,
+    transport: &T,
+) -> LookupResult {
     let config: KadConfig = dht.config.clone();
     let alpha = config.concurrency as usize;
     let beta = config.resiliency as usize;
@@ -62,12 +66,10 @@ pub async fn run_lookup<T: QueryTransport>(dht: &Kademlia, target: &PeerId, tran
             peerset.set_state(*p, PeerState::Waiting);
         }
 
-        let results: Vec<Result<Vec<PeerId>, String>> = futures::future::join_all(
-            wave.iter().map(|p| transport.query_peers(p, target)),
-        )
-        .await;
+        let results: Vec<Result<Vec<PeerId>, String>> =
+            futures::future::join_all(wave.iter().map(|p| transport.query_peers(p, target))).await;
 
-        for (p, res) in wave.iter().zip(results.into_iter()) {
+        for (p, res) in wave.iter().zip(results) {
             match res {
                 Ok(closer) => {
                     // Anti-spam: cap closer peers returned by one response at 2k.
@@ -92,10 +94,13 @@ pub async fn run_lookup<T: QueryTransport>(dht: &Kademlia, target: &PeerId, tran
             beta,
             &[PeerState::Heard, PeerState::Waiting, PeerState::Queried],
         );
-        let all_queried = closest.iter().all(|p| peerset.get_state(p) == Some(PeerState::Queried));
+        let all_queried = closest
+            .iter()
+            .all(|p| peerset.get_state(p) == Some(PeerState::Queried));
         if all_queried {
             // Follow-up pass: query any Heard/Waiting top-k peers not yet queried.
-            let followup: Vec<PeerId> = peerset.peers_in_states(k, &[PeerState::Heard, PeerState::Waiting]);
+            let followup: Vec<PeerId> =
+                peerset.peers_in_states(k, &[PeerState::Heard, PeerState::Waiting]);
             if !followup.is_empty() {
                 for p in &followup {
                     peerset.set_state(*p, PeerState::Waiting);
@@ -104,7 +109,7 @@ pub async fn run_lookup<T: QueryTransport>(dht: &Kademlia, target: &PeerId, tran
                     followup.iter().map(|p| transport.query_peers(p, target)),
                 )
                 .await;
-                for (p, res) in followup.iter().zip(fu.into_iter()) {
+                for (p, res) in followup.iter().zip(fu) {
                     match res {
                         Ok(closer) => {
                             for c in closer {
@@ -135,4 +140,3 @@ pub async fn run_lookup<T: QueryTransport>(dht: &Kademlia, target: &PeerId, tran
     result.completed = false;
     result
 }
-

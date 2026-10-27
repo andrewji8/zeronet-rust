@@ -3,15 +3,32 @@ on:
   push:
     branches: [main]
   pull_request:
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: [clippy, rustfmt]
+      - name: fmt (check)
+        run: cargo fmt --all -- --check
+      - name: clippy (-D warnings)
+        run: cargo clippy --workspace -- -D warnings
       - name: build
         run: cargo build --workspace
       - name: test
         run: cargo test --workspace
-      - name: clippy
-        run: cargo clippy --workspace -- -D warnings
+
+  security:
+    name: supply-chain audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: audit vulnerability DB
+        # Fails the job on any advisory / yanked / unpatched dep in Cargo.lock.
+        run: cargo audit

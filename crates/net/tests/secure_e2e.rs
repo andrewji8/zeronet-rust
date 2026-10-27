@@ -4,8 +4,8 @@
 
 use kad::{KadConfig, Kademlia, PeerId, ProviderStore};
 use net::{AddressBook, NoiseIdentity};
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 fn node_root(tag: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("zrs_sec_{tag}_{}", std::process::id()));
@@ -29,15 +29,9 @@ async fn secure_get_file_roundtrip() {
     let s_ab = Arc::new(AddressBook::new());
     let server_id = NoiseIdentity::new();
 
-    let s_server = net::server::start_secure(
-        s_dht,
-        root.clone(),
-        s_prov,
-        s_ab,
-        &server_id,
-    )
-    .await
-    .unwrap();
+    let s_server = net::server::start_secure(s_dht, root.clone(), s_prov, s_ab, &server_id)
+        .await
+        .unwrap();
 
     // --- client (distinct identity) ---
     let c_id = NoiseIdentity::new();
@@ -47,7 +41,10 @@ async fn secure_get_file_roundtrip() {
     let data = net::sec_get_file(s_server.addr, &c_id, site, path)
         .await
         .expect("secure GetFile must succeed");
-    assert_eq!(data, file, "secure-downloaded bytes must match the original");
+    assert_eq!(
+        data, file,
+        "secure-downloaded bytes must match the original"
+    );
 
     // --- identity binding: the client can actually confirm who it talked to. ---
     {
@@ -55,10 +52,14 @@ async fn secure_get_file_roundtrip() {
         let (mut conn, remote) = net::initiator_handshake(stream, &c_id)
             .await
             .expect("handshake");
-        assert_eq!(remote.pk(), server_id.pk(), "learned remote id must equal server id");
+        assert_eq!(
+            remote.pk(),
+            server_id.pk(),
+            "learned remote id must equal server id"
+        );
         // send one encrypted frame; server should still be alive to answer.
-        let req = serde_json::to_vec(&net::rpc::Rpc::GetClosestPeers { target: [0u8; 32] })
-            .unwrap();
+        let req =
+            serde_json::to_vec(&net::rpc::Rpc::GetClosestPeers { target: [0u8; 32] }).unwrap();
         conn.send(&req).await.unwrap();
         let _resp = conn.recv().await.unwrap();
         drop(conn);
@@ -83,10 +84,9 @@ async fn handshake_mismatch_and_tamper_are_rejected() {
     let s_ab = Arc::new(AddressBook::new());
     let server_id = NoiseIdentity::new();
 
-    let s_server =
-        net::server::start_secure(s_dht, root.clone(), s_prov, s_ab, &server_id)
-            .await
-            .unwrap();
+    let s_server = net::server::start_secure(s_dht, root.clone(), s_prov, s_ab, &server_id)
+        .await
+        .unwrap();
 
     // Tamper-rejection is covered by the in-crate AEAD unit test
     // (`aead_roundtrip_and_tamper_rejection`); here we only confirm a fresh,

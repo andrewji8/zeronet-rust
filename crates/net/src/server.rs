@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-use crate::dht::{AddressBook, peer_hex};
+use crate::dht::{peer_hex, AddressBook};
 use crate::frame::{read_frame, write_frame};
 use crate::rpc::{FileResponse, Rpc};
 
@@ -47,7 +47,14 @@ pub async fn start(
     providers: Arc<tokio::sync::Mutex<ProviderStore>>,
     addr_book: Arc<AddressBook>,
 ) -> Result<ServerHandle, std::io::Error> {
-    start_at(dht, site_root, providers, addr_book, "127.0.0.1:0".parse().unwrap()).await
+    start_at(
+        dht,
+        site_root,
+        providers,
+        addr_book,
+        "127.0.0.1:0".parse().unwrap(),
+    )
+    .await
 }
 
 /// Start an inbound RPC server on `listen`, serving local sites under
@@ -63,7 +70,9 @@ pub async fn start_at(
     let listener = TcpListener::bind(listen).await?;
     let addr = listener.local_addr()?;
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-    let handle = tokio::spawn(run_accept(listener, dht, site_root, providers, addr_book, stop_rx));
+    let handle = tokio::spawn(run_accept(
+        listener, dht, site_root, providers, addr_book, stop_rx,
+    ));
     Ok(ServerHandle {
         addr,
         stop_tx: Some(stop_tx),
@@ -132,7 +141,9 @@ pub(crate) async fn dispatch(
     let rpc: Rpc = match serde_json::from_slice(req_bytes) {
         Ok(r) => r,
         Err(_) => {
-            return json!({ "ok": false, "error": "bad request" }).to_string().into_bytes()
+            return json!({ "ok": false, "error": "bad request" })
+                .to_string()
+                .into_bytes()
         }
     };
 
@@ -153,14 +164,19 @@ pub(crate) async fn dispatch(
                 let rt = dht.rt.lock().await;
                 rt.nearest_peers(&target_peer, dht.config.bucket_size as usize)
             };
-            let items: Vec<Value> = peers.iter().map(|p| {
-                let ab = addr_book.get(&p.id);
-                json!({
-                    "id": peer_hex(&p.id),
-                    "addr": ab.map(|a| a.to_string()),
+            let items: Vec<Value> = peers
+                .iter()
+                .map(|p| {
+                    let ab = addr_book.get(&p.id);
+                    json!({
+                        "id": peer_hex(&p.id),
+                        "addr": ab.map(|a| a.to_string()),
+                    })
                 })
-            }).collect();
-            json!({ "ok": true, "peers": items }).to_string().into_bytes()
+                .collect();
+            json!({ "ok": true, "peers": items })
+                .to_string()
+                .into_bytes()
         }
         Rpc::PutValue { key, record } => {
             // `record` carries the provider peer id (hex). Store it under key.
@@ -180,19 +196,27 @@ pub(crate) async fn dispatch(
             let n = content_key.len().min(32);
             out[..n].copy_from_slice(&content_key[..n]);
             let provs = providers.lock().await.get(&out).to_vec();
-            let items: Vec<Value> = provs.iter().map(|p| {
-                let ab = addr_book.get(p);
-                json!({
-                    "id": peer_hex(p),
-                    "addr": ab.map(|a| a.to_string()),
+            let items: Vec<Value> = provs
+                .iter()
+                .map(|p| {
+                    let ab = addr_book.get(p);
+                    json!({
+                        "id": peer_hex(p),
+                        "addr": ab.map(|a| a.to_string()),
+                    })
                 })
-            }).take(count as usize).collect();
-            json!({ "ok": true, "peers": items }).to_string().into_bytes()
+                .take(count as usize)
+                .collect();
+            json!({ "ok": true, "peers": items })
+                .to_string()
+                .into_bytes()
         }
         Rpc::GetValue { key } => {
             // We do not store arbitrary values in this build; report empty.
             let _ = key;
-            json!({ "ok": false, "error": "not a provider" }).to_string().into_bytes()
+            json!({ "ok": false, "error": "not a provider" })
+                .to_string()
+                .into_bytes()
         }
         Rpc::GetFile { site, path } => {
             let file_path = site_root.join(&site).join(&path);
@@ -235,7 +259,6 @@ fn hex_to_bytes32(s: &str) -> [u8; 32] {
     out
 }
 
-
 /// A running secure inbound server: accepts TCP, performs the Noise-XX
 /// responder handshake, and serves encrypted frames through the same
 /// `dispatch` the plaintext server uses.
@@ -264,7 +287,15 @@ pub async fn start_secure(
     addr_book: Arc<AddressBook>,
     identity: &crate::secure::NoiseIdentity,
 ) -> Result<SecureServerHandle, std::io::Error> {
-    start_secure_at(dht, site_root, providers, addr_book, identity, "127.0.0.1:0".parse().unwrap()).await
+    start_secure_at(
+        dht,
+        site_root,
+        providers,
+        addr_book,
+        identity,
+        "127.0.0.1:0".parse().unwrap(),
+    )
+    .await
 }
 
 /// Start a secure inbound server on `listen`.
@@ -280,7 +311,9 @@ pub async fn start_secure_at(
     let addr = listener.local_addr()?;
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
     let id2 = identity.clone();
-    let handle = tokio::spawn(run_secure_accept(listener, dht, site_root, providers, addr_book, id2, stop_rx));
+    let handle = tokio::spawn(run_secure_accept(
+        listener, dht, site_root, providers, addr_book, id2, stop_rx,
+    ));
     Ok(SecureServerHandle {
         addr,
         stop_tx: Some(stop_tx),

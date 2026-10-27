@@ -38,7 +38,9 @@ fn print_usage() {
     println!("  zeronet-rs node [DIR] [--max-sec N] [--listen host:port] [--api host:port]");
     println!("                    [--secure-listen host:port] [--bootstrap host:port]...");
     println!("                    [--secure-bootstrap host:port]...");
-    println!("                     start a full node (Kademlia + TCP RPC + persistence + axum API)");
+    println!(
+        "                     start a full node (Kademlia + TCP RPC + persistence + axum API)"
+    );
     println!("                     --secure-listen also opens a Noise-XX encrypted RPC port");
     println!("                     (X25519 + HKDF + ChaCha20-Poly1305, the formal encryption");
     println!("                     layer that replaces ZeroNet fakedomains SNI anti-DPI).");
@@ -171,11 +173,21 @@ async fn run_node(args: &[String]) {
     }
 
     println!("ZeroNet-Rust node starting");
-    println!("  identity peer id: {:02x}{:02x}..", id.site_key()[0], id.site_key()[1]);
-    println!("  noise identity:   {} (X25519, persisted)", noise_id.pk_hex()[..12].to_string());
+    println!(
+        "  identity peer id: {:02x}{:02x}..",
+        id.site_key()[0],
+        id.site_key()[1]
+    );
+    println!(
+        "  noise identity:   {} (X25519, persisted)",
+        &noise_id.pk_hex()[..12]
+    );
     println!("  data dir:        {}", data_dir.display());
     println!("  persistence:     kad.db + storage.db + noise_identity.bin under data dir");
-    println!("  kad params:      k={} alpha={} beta={}", dht.config.bucket_size, dht.config.concurrency, dht.config.resiliency);
+    println!(
+        "  kad params:      k={} alpha={} beta={}",
+        dht.config.bucket_size, dht.config.concurrency, dht.config.resiliency
+    );
 
     // --- Start inbound RPC server ---
     let dht_arc = Arc::new(dht);
@@ -261,7 +273,8 @@ async fn run_node(args: &[String]) {
             let label = format!("b{idx}");
             handles.push(tokio::spawn(async move {
                 loop {
-                    match net::dht::connect_and_bootstrap(dht_arc.clone(), &addr_book, baddr).await {
+                    match net::dht::connect_and_bootstrap(dht_arc.clone(), &addr_book, baddr).await
+                    {
                         Ok(remote) => {
                             println!(
                                 "  [{}] bootstrap ok: learned peer {:02x}{}.. at {}",
@@ -348,7 +361,10 @@ async fn run_node(args: &[String]) {
     }
     let _ = server_handle.stop().await;
 
-    println!("node stopped; routing table saved to {}", kad_db_path.display());
+    println!(
+        "node stopped; routing table saved to {}",
+        kad_db_path.display()
+    );
     let _ = data_dir;
 }
 

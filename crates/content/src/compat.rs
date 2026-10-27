@@ -1,4 +1,4 @@
-﻿//! ZeroNet compatibility layer.
+//! ZeroNet compatibility layer.
 //!
 //! 1. **ZeroNet `content.json` format** - parse/convert between ZeroNet's
 //!    `content.json` (Secp256k1 + sha512) and the native BLAKE3/Ed25519 manifest.
@@ -39,7 +39,8 @@ pub struct ZeronetFile {
 /// Parse ZeroNet `content.json` bytes.
 pub fn parse_zeronet_content(bytes: &[u8]) -> Result<ZeronetContent, CompatError> {
     let v: Value = serde_json::from_slice(bytes).map_err(|e| CompatError::Parse(e.to_string()))?;
-    let c: ZeronetContent = serde_json::from_value(v).map_err(|e| CompatError::Parse(e.to_string()))?;
+    let c: ZeronetContent =
+        serde_json::from_value(v).map_err(|e| CompatError::Parse(e.to_string()))?;
     Ok(c)
 }
 
@@ -185,7 +186,7 @@ fn python_float_repr(x: f64) -> String {
     let all_digits: String = format!("{}{}", int_part, frac_part);
     let n_frac = frac_part.len() as i32;
     let p = all_digits.len() as i32 - n_frac; // decimal point position
-    // Index of first non-zero significant digit.
+                                              // Index of first non-zero significant digit.
     let i: i32 = all_digits
         .char_indices()
         .find(|&(_, c)| c != '0')
@@ -264,9 +265,6 @@ pub use crate::secp::{
     sign_electrum, wif_to_address, wif_to_private, ZeronetKey,
 };
 
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,8 +317,10 @@ mod tests {
 
     #[test]
     fn python_json_dump_ensure_ascii_unicode() {
-        let v: Value =
-            serde_json::from_str(r#"{"nested": {"a": false, "z": [1, "two", [3]]}, "u": "caf\u00e9 \u2764"}"#).unwrap();
+        let v: Value = serde_json::from_str(
+            r#"{"nested": {"a": false, "z": [1, "two", [3]]}, "u": "caf\u00e9 \u2764"}"#,
+        )
+        .unwrap();
         assert_eq!(
             python_json_dump(&v),
             r#"{"nested": {"a": false, "z": [1, "two", [3]]}, "u": "caf\u00e9 \u2764"}"#
@@ -366,5 +366,3 @@ mod tests {
         assert_eq!(c.files.get("i.html").unwrap().size, 9);
     }
 }
-
-

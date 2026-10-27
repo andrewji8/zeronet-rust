@@ -1,5 +1,4 @@
-﻿//! Task state tracking.
-
+//! Task state tracking.
 
 /// The lifecycle state of a download task.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -9,4 +8,3 @@ pub enum TaskState {
     Done,
     Failed { attempts: u32 },
 }
-

@@ -1,4 +1,4 @@
-﻿//! SQLite persistence for the Kademlia routing table.
+//! SQLite persistence for the Kademlia routing table.
 //!
 //! Lets a restarting node rebuild its routing table from disk instead of
 //! re-discovering every peer from scratch.
@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 use rusqlite::{params, Connection};
 
-use crate::rt::{RtPeer, RoutingTable};
+use crate::rt::{RoutingTable, RtPeer};
 use crate::KadConfig;
 use crate::PeerId;
 
@@ -86,7 +86,10 @@ impl RtDb {
                     Some(v) if (0..=u32::MAX as i64).contains(&v) => Some(v as u32),
                     _ => None,
                 };
-                table.add_peer(RtPeer { id: PeerId(raw), ip_group });
+                table.add_peer(RtPeer {
+                    id: PeerId(raw),
+                    ip_group,
+                });
             }
         }
         Ok(table)
@@ -105,18 +108,25 @@ mod tests {
         let cfg = KadConfig::default();
         let self_id = PeerId([1u8; 32]);
         let mut table = RoutingTable::new(self_id, cfg.clone());
-        table.add_peer(RtPeer { id: PeerId([2u8; 32]), ip_group: Some(7) });
-        table.add_peer(RtPeer { id: PeerId([3u8; 32]), ip_group: None });
+        table.add_peer(RtPeer {
+            id: PeerId([2u8; 32]),
+            ip_group: Some(7),
+        });
+        table.add_peer(RtPeer {
+            id: PeerId([3u8; 32]),
+            ip_group: None,
+        });
 
         let db = RtDb::open(&path).unwrap();
         db.save_routing_table(&table).unwrap();
 
-        let reloaded = RtDb::open(&path).unwrap().load_routing_table(self_id, cfg).unwrap();
+        let reloaded = RtDb::open(&path)
+            .unwrap()
+            .load_routing_table(self_id, cfg)
+            .unwrap();
         assert!(reloaded.find(&PeerId([2u8; 32])).is_some());
         assert!(reloaded.find(&PeerId([3u8; 32])).is_some());
         assert_eq!(reloaded.find(&PeerId([2u8; 32])).unwrap().ip_group, Some(7));
         let _ = std::fs::remove_file(&path);
     }
 }
-
-

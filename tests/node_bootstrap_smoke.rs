@@ -3,7 +3,12 @@
 use std::process::Stdio;
 use std::time::Duration;
 
-fn start_node(data_dir: &std::path::Path, listen: &str, bootstrap: &str, max_sec: u32) -> std::process::Child {
+fn start_node(
+    data_dir: &std::path::Path,
+    listen: &str,
+    bootstrap: &str,
+    max_sec: u32,
+) -> std::process::Child {
     let bin = std::env::current_exe()
         .expect("current exe")
         .parent()
@@ -24,10 +29,7 @@ fn start_node(data_dir: &std::path::Path, listen: &str, bootstrap: &str, max_sec
 }
 
 fn wait_and_grep(child: std::process::Child, needle: &str) -> String {
-    let out = child
-        .wait_with_output()
-        .expect("wait")
-        .stdout;
+    let out = child.wait_with_output().expect("wait").stdout;
     let text = String::from_utf8_lossy(&out).to_string();
     assert!(
         text.contains(needle),
@@ -58,10 +60,14 @@ fn two_cli_processes_bootstrap_each_other() {
     let _ = std::thread::sleep(Duration::from_millis(200));
     let a_rt = a_dir.join("kad.db");
     let b_rt = b_dir.join("kad.db");
-    assert!(a_rt.exists(), "A's kad.db should exist after graceful shutdown");
-    assert!(b_rt.exists(), "B's kad.db should exist after graceful shutdown");
+    assert!(
+        a_rt.exists(),
+        "A's kad.db should exist after graceful shutdown"
+    );
+    assert!(
+        b_rt.exists(),
+        "B's kad.db should exist after graceful shutdown"
+    );
 
     let _ = std::fs::remove_dir_all(&base);
 }
-
-

@@ -1,4 +1,4 @@
-﻿//! Content-addressing layer: Ed25519 + BLAKE3 Merkle trees, with a ZeroNet
+//! Content-addressing layer: Ed25519 + BLAKE3 Merkle trees, with a ZeroNet
 //! compatibility shim (Secp256k1 content.json).
 //!
 //! - `manifest`: site manifest (tree root + signature)
@@ -6,11 +6,11 @@
 //! - `sign`:     Ed25519 keypair, 112-byte signable block
 //! - `compat`:   parse / emit ZeroNet `content.json` (Secp256k1 + sha512)
 
+pub mod compat;
 pub mod manifest;
 pub mod merkle;
-pub mod sign;
 pub mod secp;
-pub mod compat;
+pub mod sign;
 
 use serde::{Deserialize, Serialize};
 
@@ -47,5 +47,3 @@ pub struct SiteManifest {
     #[serde(default)]
     pub files: Vec<FileEntry>,
 }
-
-

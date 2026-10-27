@@ -1,4 +1,4 @@
-﻿//! axum handlers: node status, local site file serving, DHT download trigger.
+//! axum handlers: node status, local site file serving, DHT download trigger.
 
 use axum::extract::{Path as AxumPath, State};
 use axum::http::StatusCode;
@@ -57,8 +57,10 @@ pub async fn download(
     State(s): State<ApiState>,
     Json(req): Json<DownloadReq>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let expected = unhex32(&req.expected_hash)
-        .ok_or((StatusCode::BAD_REQUEST, "expected_hash must be 64 hex chars".to_string()))?;
+    let expected = unhex32(&req.expected_hash).ok_or((
+        StatusCode::BAD_REQUEST,
+        "expected_hash must be 64 hex chars".to_string(),
+    ))?;
     let key_bytes: [u8; 32] = match unhex32(&req.content_key) {
         Some(k) => k,
         None => {

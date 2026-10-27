@@ -1,4 +1,4 @@
-﻿//! WebSocket endpoint: accept UI commands, reply with live node status.
+//! WebSocket endpoint: accept UI commands, reply with live node status.
 //!
 //! axum 0.7 pattern: the route handler takes a `WebSocketUpgrade`; calling
 //! `on_upgrade` hands the real `WebSocket` to a follow-up handler.
@@ -25,7 +25,11 @@ async fn socket_handler(s: ApiState, mut socket: WebSocket) {
         "rt_peers": rt_len,
         "version": env!("CARGO_PKG_VERSION"),
     });
-    if socket.send(Message::Text(status.to_string().into())).await.is_err() {
+    if socket
+        .send(Message::Text(status.to_string().into()))
+        .await
+        .is_err()
+    {
         return;
     }
 
@@ -35,12 +39,13 @@ async fn socket_handler(s: ApiState, mut socket: WebSocket) {
             let t = t.to_string();
             let rt_len = s.dht.rt.lock().await.len();
             let reply = json!({ "type": "ack", "cmd": t, "rt_peers": rt_len });
-            if socket.send(Message::Text(reply.to_string().into())).await.is_err() {
+            if socket
+                .send(Message::Text(reply.to_string().into()))
+                .await
+                .is_err()
+            {
                 break;
             }
         }
     }
 }
-
-
-

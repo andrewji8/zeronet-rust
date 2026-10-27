@@ -1,4 +1,4 @@
-﻿//! Per-query peer state machine (PeerHeard -> PeerWaiting -> PeerQueried | PeerUnreachable).
+//! Per-query peer state machine (PeerHeard -> PeerWaiting -> PeerQueried | PeerUnreachable).
 
 use std::collections::{HashMap, VecDeque};
 
@@ -52,11 +52,17 @@ impl QueryPeerset {
     }
 
     pub fn num_heard(&self) -> usize {
-        self.state.values().filter(|s| **s == PeerState::Heard).count()
+        self.state
+            .values()
+            .filter(|s| **s == PeerState::Heard)
+            .count()
     }
 
     pub fn num_waiting(&self) -> usize {
-        self.state.values().filter(|s| **s == PeerState::Waiting).count()
+        self.state
+            .values()
+            .filter(|s| **s == PeerState::Waiting)
+            .count()
     }
 
     /// Closest `n` peers in any of the given states.

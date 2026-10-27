@@ -1,4 +1,4 @@
-﻿//! A small concurrent download engine.
+//! A small concurrent download engine.
 //!
 //! Consumes `(path, expected-hash)` items, downloads each via
 //! `download_and_store` in bounded-concurrency windows, and returns one
@@ -41,12 +41,7 @@ pub struct DownloadEngine {
 }
 
 impl DownloadEngine {
-    pub fn new(
-        addr: std::net::SocketAddr,
-        site: &str,
-        root: PathBuf,
-        pool_size: usize,
-    ) -> Self {
+    pub fn new(addr: std::net::SocketAddr, site: &str, root: PathBuf, pool_size: usize) -> Self {
         Self {
             addr,
             site: site.to_string(),
@@ -58,8 +53,7 @@ impl DownloadEngine {
     /// Download a single file by `rel_path`, BLAKE3-verifying it against
     /// `expected`, then writing it under `root/rel_path`.
     pub async fn download_one(&self, rel_path: &str, expected: [u8; 32]) -> TaskOutcome {
-        match download_and_store(self.addr, &self.site, rel_path, expected, &self.root).await
-        {
+        match download_and_store(self.addr, &self.site, rel_path, expected, &self.root).await {
             Ok(p) => TaskOutcome::Ok(p),
             Err(e) => TaskOutcome::Err(e.into()),
         }
@@ -67,10 +61,7 @@ impl DownloadEngine {
 
     /// Run a batch of `(path, expected-hash)` downloads concurrently, bounded
     /// to `pool_size` in-flight. Returns one outcome per input, in order.
-    pub async fn download_batch(
-        &self,
-        items: &[(String, [u8; 32])],
-    ) -> Vec<TaskOutcome> {
+    pub async fn download_batch(&self, items: &[(String, [u8; 32])]) -> Vec<TaskOutcome> {
         let n = items.len();
         let mut out: Vec<Option<TaskOutcome>> = vec![None; n];
 
@@ -78,15 +69,16 @@ impl DownloadEngine {
         while start < n {
             let end = (start + self.pool_size).min(n);
             let mut jobs = Vec::with_capacity(end - start);
-            for i in start..end {
-                let path = items[i].0.clone();
-                let hash = items[i].1;
+            for (offset, item) in items[start..end].iter().enumerate() {
+                let idx = start + offset;
+                let path = item.0.clone();
+                let hash = item.1;
                 let addr = self.addr;
                 let site = self.site.clone();
                 let root = self.root.clone();
                 jobs.push(async move {
                     let result = download_and_store(addr, &site, &path, hash, &root).await;
-                    (i, result)
+                    (idx, result)
                 });
             }
             for (i, res) in futures::future::join_all(jobs).await {
@@ -98,7 +90,9 @@ impl DownloadEngine {
             start = end;
         }
 
-        out.into_iter().map(|o| o.expect("every window index is filled")).collect()
+        out.into_iter()
+            .map(|o| o.expect("every window index is filled"))
+            .collect()
     }
 }
 
@@ -111,8 +105,6 @@ impl From<crate::DownloadError> for DownloadTaskError {
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -172,7 +164,11 @@ mod tests {
 
         match outcome {
             TaskOutcome::Ok(p) => {
-                assert_eq!(std::fs::read(&p).unwrap(), file_bytes, "stored bytes must match");
+                assert_eq!(
+                    std::fs::read(&p).unwrap(),
+                    file_bytes,
+                    "stored bytes must match"
+                );
             }
             TaskOutcome::Err(e) => panic!("unexpected error: {e}"),
         }
@@ -222,4 +218,3 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
-

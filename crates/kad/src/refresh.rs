@@ -1,4 +1,4 @@
-﻿//! Routing-table refresh: periodically ping stale buckets and top them up.
+//! Routing-table refresh: periodically ping stale buckets and top them up.
 
 use std::time::Duration;
 
@@ -27,6 +27,3 @@ async fn refresh_once(dht: &Kademlia) {
     // That wire work is owned by the `net` crate; here we just drive the timer.
     let _ = stale;
 }
-
-
-

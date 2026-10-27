@@ -1,4 +1,4 @@
-﻿//! Wire RPC messages.
+//! Wire RPC messages.
 //!
 //! DHT RPCs (GetValue/PutValue/...) coexist with content-download RPCs
 //! (GetFile). Requests are serialized to a JSON body inside a length-prefixed
@@ -22,10 +22,7 @@ pub enum Rpc {
 
     // --- handshake ---
     /// Protocol handshake exchanged on connect. The peer echoes it back.
-    Handshake {
-        peer: String,
-        protocol: String,
-    },
+    Handshake { peer: String, protocol: String },
 
     // --- content download ---
     /// Fetch one file by site address + relative path.

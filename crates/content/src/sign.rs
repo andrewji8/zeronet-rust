@@ -1,4 +1,4 @@
-﻿//! Ed25519 keypair helpers.
+//! Ed25519 keypair helpers.
 
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::RngCore;
@@ -16,14 +16,20 @@ impl Identity {
         rand::thread_rng().fill_bytes(&mut bytes);
         let signing_key = SigningKey::from_bytes(&bytes);
         let verifying_key = signing_key.verifying_key();
-        Self { verifying_key, signing_key }
+        Self {
+            verifying_key,
+            signing_key,
+        }
     }
 
     /// Load from existing secret bytes (32).
     pub fn from_secret(secret: &[u8; 32]) -> Self {
         let signing_key = SigningKey::from_bytes(secret);
         let verifying_key = signing_key.verifying_key();
-        Self { verifying_key, signing_key }
+        Self {
+            verifying_key,
+            signing_key,
+        }
     }
 
     /// Public key as raw 32 bytes (used as the site address).

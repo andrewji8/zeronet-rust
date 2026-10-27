@@ -1,4 +1,4 @@
-﻿//! BLAKE3 Merkle tree over file entries.
+//! BLAKE3 Merkle tree over file entries.
 //!
 //! Block cap mirrors Hypercore's `MAX_SUGGESTED_BLOCK_SIZE = 15 MB`.
 
@@ -60,10 +60,15 @@ pub fn build_manifest(
 
 /// Verify a manifest's Ed25519 signature against its signable block.
 pub fn verify_manifest(m: &SiteManifest) -> Result<(), SignatureError> {
-    let signable = signable_block(&m.site_key, &m.tree_hash, m.file_count as u64, 0, m.modified as u64);
-    let public_key =
-        ed25519_dalek::VerifyingKey::from_bytes(&m.site_key)
-            .map_err(|e| SignatureError::BadKey(e.to_string()))?;
+    let signable = signable_block(
+        &m.site_key,
+        &m.tree_hash,
+        m.file_count as u64,
+        0,
+        m.modified as u64,
+    );
+    let public_key = ed25519_dalek::VerifyingKey::from_bytes(&m.site_key)
+        .map_err(|e| SignatureError::BadKey(e.to_string()))?;
     let sig = ed25519_dalek::Signature::from_slice(&m.signature)
         .map_err(|e| SignatureError::BadSignature(e.to_string()))?;
     use ed25519_dalek::Verifier;
@@ -100,19 +105,12 @@ pub enum SignatureError {
     BadSignature(String),
 }
 
-
-
-
-
-
-
-
 // Test that build_manifest + verify_manifest roundtrip works.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::merkle::{build_manifest, file_hash, verify_manifest};
     use crate::sign::Identity;
-    use crate::merkle::{build_manifest, verify_manifest, file_hash};
 
     #[test]
     fn test_manifest_roundtrip() {
@@ -133,7 +131,12 @@ mod tests {
     fn test_file_hash_matches() {
         let data = b"test data";
         let h = file_hash(data);
-        let entry = FileEntry { path: "f".into(), hash: h, size: data.len() as u64, optional: false };
+        let entry = FileEntry {
+            path: "f".into(),
+            hash: h,
+            size: data.len() as u64,
+            optional: false,
+        };
         assert!(crate::merkle::verify_file(&entry, data));
         let bad = b"wrong data";
         assert!(!crate::merkle::verify_file(&entry, bad));

@@ -1,12 +1,12 @@
-﻿//! Exercise the axum router in-process (tower oneshot, no real socket):
+//! Exercise the axum router in-process (tower oneshot, no real socket):
 //! /status, site file serving, /download 400 on bad input.
 
 use std::sync::Arc;
 
 use axum::body::Body;
+use axum::http;
 use kad::{KadConfig, Kademlia, PeerId, ProviderStore};
 use net::AddressBook;
-use axum::http;
 use tower::ServiceExt;
 fn make_router(dht: Arc<Kademlia>) -> axum::Router {
     let providers = Arc::new(tokio::sync::Mutex::new(ProviderStore::new()));
@@ -32,7 +32,9 @@ async fn status_reports_self_peer() {
         .await
         .unwrap();
     assert_eq!(resp.status(), http::StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(v["rt_peers"], 0u8);
     assert!(v.get("self_peer").is_some());
@@ -48,7 +50,9 @@ async fn serve_site_returns_local_file() {
         .unwrap();
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), http::StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(&body[..], b"<h1>api</h1>");
 }
 
@@ -81,4 +85,3 @@ async fn download_rejects_bad_hash() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), http::StatusCode::BAD_REQUEST);
 }
-

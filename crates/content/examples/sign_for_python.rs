@@ -1,10 +1,12 @@
-﻿//! Sign a content.json with the Rust engine and print the full document so a
+//! Sign a content.json with the Rust engine and print the full document so a
 //! ZeroNet Python `sslcrypto` reference can recover the address from it.
 use content::compat::{sign_content_json, ZeronetKey};
 use content::secp::recover_address;
 
 fn main() {
-    let wif = std::env::args().nth(1).unwrap_or("5K9S6dVpufGnroRgFrT6wsKiz2mJRYsC73eWDmajaHserAp3F1C".to_string());
+    let wif = std::env::args()
+        .nth(1)
+        .unwrap_or("5K9S6dVpufGnroRgFrT6wsKiz2mJRYsC73eWDmajaHserAp3F1C".to_string());
     let key = ZeronetKey::from_wif(&wif).expect("bad wif");
 
     let content = serde_json::json!({
@@ -23,7 +25,11 @@ fn main() {
 
     // Self-check: recover the address from the signature we just produced.
     let self_rec = recover_address(&sc, &sig).expect("self-recovery failed");
-    assert_eq!(self_rec, key.address(), "Rust self-recovery must equal signing address");
+    assert_eq!(
+        self_rec,
+        key.address(),
+        "Rust self-recovery must equal signing address"
+    );
 
     let signed = key.sign_content(&content).expect("sign_content failed");
     println!("address: {}", key.address());

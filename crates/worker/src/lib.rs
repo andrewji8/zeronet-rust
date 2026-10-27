@@ -1,13 +1,13 @@
-﻿//! Download task pool: concurrent file downloads with task scheduling.
+//! Download task pool: concurrent file downloads with task scheduling.
 //!
 //! Replaces ZeroNet's `Worker` + `WorkerManager` with tokio task spawn.
 //! No global monkey-patch; each task is an independent tokio::task.
 
-pub mod task;
 pub mod download;
 pub mod engine;
+pub mod task;
 
-pub use download::{download_and_store, download_via_dht, fetch_file, DownloadError, stage_of};
+pub use download::{download_and_store, download_via_dht, fetch_file, stage_of, DownloadError};
 pub use engine::{DownloadEngine, DownloadTaskError, TaskOutcome};
 
 use kad::PeerId;
@@ -46,12 +46,15 @@ pub struct Stats {
 
 impl Stats {
     pub fn new() -> Self {
-        Self { completed: std::sync::atomic::AtomicU32::new(0), failed: std::sync::atomic::AtomicU32::new(0) }
+        Self {
+            completed: std::sync::atomic::AtomicU32::new(0),
+            failed: std::sync::atomic::AtomicU32::new(0),
+        }
     }
 }
 
-
-
-
-
-
+impl Default for Stats {
+    fn default() -> Self {
+        Self::new()
+    }
+}

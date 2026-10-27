@@ -1,17 +1,20 @@
-﻿//! Hash field index: fast lookup of which files are in the local cache.
+//! Hash field index: fast lookup of which files are in the local cache.
 //!
 //! Replaces ZeroNet's `PeerHashfield` (a binary trie of file hashes).
 
 use std::collections::HashSet;
 
 /// An in-memory set of hashes for files currently present locally.
+#[derive(Default)]
 pub struct HashField {
     hashes: HashSet<[u8; 32]>,
 }
 
 impl HashField {
     pub fn new() -> Self {
-        Self { hashes: HashSet::new() }
+        Self {
+            hashes: HashSet::new(),
+        }
     }
 
     pub fn insert(&mut self, h: [u8; 32]) {
@@ -44,4 +47,3 @@ impl HashField {
         self.hashes.iter().copied().collect()
     }
 }
-

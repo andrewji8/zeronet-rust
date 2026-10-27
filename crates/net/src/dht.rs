@@ -1,4 +1,4 @@
-﻿//! Wire DHT: the transport that turns Kademlia lookups into real TCP RPCs,
+//! Wire DHT: the transport that turns Kademlia lookups into real TCP RPCs,
 //! plus provider exchange over the wire.
 //!
 //! - `AddressBook` maps `PeerId -> SocketAddr` so a discovered peer id can be
@@ -16,8 +16,8 @@ use std::sync::{Arc, Mutex};
 use serde_json::{json, Value};
 use tokio::net::TcpStream;
 
-use kad::PeerId;
 use kad::query::lookup::QueryTransport;
+use kad::PeerId;
 
 use crate::frame::{read_frame, write_frame};
 use crate::rpc::Rpc;
@@ -29,7 +29,9 @@ pub struct AddressBook {
 
 impl AddressBook {
     pub fn new() -> Self {
-        Self { map: Mutex::new(HashMap::new()) }
+        Self {
+            map: Mutex::new(HashMap::new()),
+        }
     }
 
     pub fn add(&self, id: PeerId, addr: SocketAddr) {
@@ -44,9 +46,18 @@ impl AddressBook {
         self.map.lock().unwrap().len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.map.lock().unwrap().is_empty()
+    }
+
     /// All known `(peer, addr)` pairs (for bootstrap / provider fan-out).
     pub fn drain(&self) -> Vec<(PeerId, SocketAddr)> {
-        self.map.lock().unwrap().iter().map(|(k, v)| (*k, *v)).collect()
+        self.map
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .collect()
     }
 }
 
@@ -60,7 +71,9 @@ impl Default for AddressBook {
 async fn rpc_roundtrip(addr: SocketAddr, req: &Rpc) -> Result<Value, String> {
     let mut stream = TcpStream::connect(addr).await.map_err(|e| e.to_string())?;
     let body = serde_json::to_string(req).map_err(|e| e.to_string())?;
-    write_frame(&mut stream, body.as_bytes()).await.map_err(|e| e.to_string())?;
+    write_frame(&mut stream, body.as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
     let resp = read_frame(&mut stream).await.map_err(|e| e.to_string())?;
     let v: Value = serde_json::from_slice(&resp).map_err(|e| e.to_string())?;
     Ok(v)
@@ -114,7 +127,10 @@ pub struct NetQueryTransport {
 
 impl NetQueryTransport {
     pub fn new(addr_book: Arc<AddressBook>) -> Self {
-        Self { addr_book, dht: None }
+        Self {
+            addr_book,
+            dht: None,
+        }
     }
 
     pub fn with_dht(mut self, dht: Arc<kad::Kademlia>) -> Self {
@@ -124,16 +140,18 @@ impl NetQueryTransport {
 }
 
 impl QueryTransport for NetQueryTransport {
-    async fn query_peers(
-        &self,
-        peer: &PeerId,
-        target: &PeerId,
-    ) -> Result<Vec<PeerId>, String> {
-        let addr = self.addr_book.get(peer).ok_or_else(|| format!("no address for {peer:?}"))?;
+    async fn query_peers(&self, peer: &PeerId, target: &PeerId) -> Result<Vec<PeerId>, String> {
+        let addr = self
+            .addr_book
+            .get(peer)
+            .ok_or_else(|| format!("no address for {peer:?}"))?;
         let req = Rpc::GetClosestPeers { target: target.0 };
         let resp = rpc_roundtrip(addr, &req).await?;
         if resp.get("ok") != Some(&json!(true)) {
-            return Err(format!("peer refused: {}", resp.get("error").unwrap_or(&json!("?"))));
+            return Err(format!(
+                "peer refused: {}",
+                resp.get("error").unwrap_or(&json!("?"))
+            ));
         }
         let learned = parse_peers(&resp);
         let mut out: Vec<PeerId> = Vec::new();
@@ -145,7 +163,10 @@ impl QueryTransport for NetQueryTransport {
             // register closer peer in the routing table
             if let Some(dht) = &self.dht {
                 if let Ok(mut g) = dht.rt.try_lock() {
-                    let _ = g.add_peer(kad::rt::RtPeer { id: *id, ip_group: None });
+                    let _ = g.add_peer(kad::rt::RtPeer {
+                        id: *id,
+                        ip_group: None,
+                    });
                 }
             }
             out.push(*id);
@@ -177,7 +198,10 @@ pub async fn provide_over_wire(
     }
     let record = peer_hex(&provider);
     for (_peer, addr) in targets {
-        let req = Rpc::PutValue { key: key.clone(), record: record.clone().into_bytes() };
+        let req = Rpc::PutValue {
+            key: key.clone(),
+            record: record.clone().into_bytes(),
+        };
         let _ = rpc_roundtrip(addr, &req).await;
     }
     Ok(())
@@ -194,7 +218,10 @@ pub async fn find_providers_over_wire(
     let key = kad::hash_key(content_key).to_vec();
     let mut out: Vec<(PeerId, Option<SocketAddr>)> = Vec::new();
     for (_peer, addr) in targets.iter() {
-        let req = Rpc::FindProviders { content_key: key.clone(), count };
+        let req = Rpc::FindProviders {
+            content_key: key.clone(),
+            count,
+        };
         let resp = rpc_roundtrip(*addr, &req).await.ok();
         if let Some(v) = resp {
             if v.get("ok") == Some(&json!(true)) {
@@ -208,7 +235,6 @@ pub async fn find_providers_over_wire(
     }
     out
 }
-
 
 /// Connect to `addr`, exchange a `Handshake`, learn the remote peer's id and
 /// address, and register both in this node's routing table and address book.
@@ -228,21 +254,26 @@ pub async fn connect_and_bootstrap(
     };
     let resp = rpc_roundtrip(addr, &req).await?;
     if resp.get("ok") != Some(&json!(true)) {
-        return Err(format!("handshake refused: {}", resp.get("error").unwrap_or(&json!("?"))));
+        return Err(format!(
+            "handshake refused: {}",
+            resp.get("error").unwrap_or(&json!("?"))
+        ));
     }
-    let hex = resp.get("self_peer").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let hex = resp
+        .get("self_peer")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let remote = PeerId(hex_to_bytes32(&hex));
     addr_book.add(remote, addr);
     if let Ok(mut g) = dht.rt.try_lock() {
-        let _ = g.add_peer(kad::rt::RtPeer { id: remote, ip_group: None });
+        let _ = g.add_peer(kad::rt::RtPeer {
+            id: remote,
+            ip_group: None,
+        });
     }
     Ok(remote)
 }
-
-
-
-
-
 
 /// Resolve a peer id to a reachable `SocketAddr` using the address book.
 ///
@@ -253,7 +284,6 @@ pub async fn connect_and_bootstrap(
 pub fn peer_addr(addr_book: &AddressBook, id: &PeerId) -> Option<SocketAddr> {
     addr_book.get(id)
 }
-
 
 /// Secure bootstrap: connect to `addr` over a Noise-XX-encrypted channel,
 /// then exchange the same `Handshake` RPC the plaintext path uses. The Noise
@@ -288,11 +318,18 @@ pub async fn connect_and_bootstrap_secure(
             v.get("error").unwrap_or(&json!("?"))
         ));
     }
-    let hex = v.get("self_peer").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let hex = v
+        .get("self_peer")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
     let remote_peer = PeerId(hex_to_bytes32(&hex));
     addr_book.add(remote_peer, addr);
     if let Ok(mut g) = dht.rt.try_lock() {
-        let _ = g.add_peer(kad::rt::RtPeer { id: remote_peer, ip_group: None });
+        let _ = g.add_peer(kad::rt::RtPeer {
+            id: remote_peer,
+            ip_group: None,
+        });
     }
     Ok((remote_peer, remote.hex().to_string()))
 }

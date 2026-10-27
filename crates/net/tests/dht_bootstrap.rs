@@ -1,11 +1,10 @@
-﻿//! Two-node test: start two real servers, connect them via `connect_and_bootstrap`,
+//! Two-node test: start two real servers, connect them via `connect_and_bootstrap`,
 //! exchange provider records via `provide_over_wire`, and confirm
 //! `find_providers_over_wire` returns them.
 
 use kad::{KadConfig, Kademlia, PeerId, ProviderStore};
 use net::AddressBook;
 use std::sync::Arc;
-
 
 #[tokio::test]
 async fn two_nodes_discover_each_other() {
@@ -34,21 +33,27 @@ async fn two_nodes_discover_each_other() {
         .unwrap();
 
     // Bootstrap: A learns B, B learns A (symmetric).
-    let b_as_seen_by_a = net::dht::connect_and_bootstrap(a_dht.clone(), &a_ab, b_server.addr).await.unwrap();
+    let b_as_seen_by_a = net::dht::connect_and_bootstrap(a_dht.clone(), &a_ab, b_server.addr)
+        .await
+        .unwrap();
     assert_eq!(b_as_seen_by_a, b_id, "A should learn B's id");
-    let a_as_seen_by_b = net::dht::connect_and_bootstrap(b_dht.clone(), &b_ab, a_server.addr).await.unwrap();
+    let a_as_seen_by_b = net::dht::connect_and_bootstrap(b_dht.clone(), &b_ab, a_server.addr)
+        .await
+        .unwrap();
     assert_eq!(a_as_seen_by_b, a_id, "B should learn A's id");
 
     // B claims to be a provider of content key "xyz" (locally + to A).
     let key = b"xyz";
-    net::dht::provide_over_wire(&b_prov, &b_ab, key, b_id, 1).await.unwrap();
+    net::dht::provide_over_wire(&b_prov, &b_ab, key, b_id, 1)
+        .await
+        .unwrap();
     // A claims too (locally + to B).
-    net::dht::provide_over_wire(&a_prov, &a_ab, key, a_id, 1).await.unwrap();
+    net::dht::provide_over_wire(&a_prov, &a_ab, key, a_id, 1)
+        .await
+        .unwrap();
 
     // A's provider store should now contain B (sent by B) and A itself.
-    let a_providers: Vec<_> = {
-        a_prov.lock().await.get(&kad::hash_key(key)).to_vec()
-    };
+    let a_providers: Vec<_> = { a_prov.lock().await.get(&kad::hash_key(key)).to_vec() };
     assert!(
         a_providers.contains(&b_id),
         "A's provider store should contain B after wire exchange: {a_providers:?}"
@@ -56,17 +61,26 @@ async fn two_nodes_discover_each_other() {
 
     // A queries the wire for providers of "xyz" and should find B.
     let found = net::dht::find_providers_over_wire(&a_ab, key, 4).await;
-    assert!(found.iter().any(|(p, _)| *p == b_id), "wire find should return B: {found:?}");
+    assert!(
+        found.iter().any(|(p, _)| *p == b_id),
+        "wire find should return B: {found:?}"
+    );
 
     // Confirm A's DHT routing table also gained B (via the GetClosestPeers transport path
     // is not exercised here, but the bootstrap path added B explicitly).
     {
         let rt = a_dht.rt.lock().await;
-        assert!(rt.find(&b_id).is_some(), "A's routing table should contain B after bootstrap");
+        assert!(
+            rt.find(&b_id).is_some(),
+            "A's routing table should contain B after bootstrap"
+        );
     }
     {
         let rt = b_dht.rt.lock().await;
-        assert!(rt.find(&a_id).is_some(), "B's routing table should contain A after bootstrap");
+        assert!(
+            rt.find(&a_id).is_some(),
+            "B's routing table should contain A after bootstrap"
+        );
     }
 
     let _ = a_server.stop().await;
@@ -74,9 +88,6 @@ async fn two_nodes_discover_each_other() {
     let _ = std::fs::remove_dir_all(&a_root);
     let _ = std::fs::remove_dir_all(&b_root);
 }
-
-
-
 
 /// The complete chain: discover a provider over the DHT, then download the
 /// file from it via `worker::download_via_dht` (BLAKE3-verified).
@@ -139,4 +150,3 @@ async fn full_chain_discover_then_download() {
     let _ = std::fs::remove_dir_all(&p_root);
     let _ = std::fs::remove_dir_all(&out_root);
 }
-

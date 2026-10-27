@@ -1,4 +1,4 @@
-﻿//! Secp256k1 (ZeroNet) signing + verification: ECRECOVER, ECDRECOVER, address
+//! Secp256k1 (ZeroNet) signing + verification: ECRECOVER, ECDRECOVER, address
 //! derivation, and ZeroNet's exact message framing.
 //!
 //! - WIF:            `base58check(0x80 + privkey[:32] [+ 0x01])`
@@ -147,11 +147,9 @@ pub fn recover_address(data: &str, sign_b64: &str) -> Option<String> {
 
     let digest_bytes = bitcoin_double_sha256(data);
     let message = Message::from_digest_slice(&digest_bytes).ok()?;
-    let sig = RecoverableSignature::from_compact(
-        &compact,
-        RecoveryId::from_i32(recid as i32).ok()?,
-    )
-    .ok()?;
+    let sig =
+        RecoverableSignature::from_compact(&compact, RecoveryId::from_i32(recid as i32).ok()?)
+            .ok()?;
 
     let secp = Secp256k1::verification_only();
     let pk = secp.recover_ecdsa(&message, &sig).ok()?;
@@ -159,7 +157,9 @@ pub fn recover_address(data: &str, sign_b64: &str) -> Option<String> {
 }
 
 fn parse_electrum_signature(sig_b64: &str) -> Option<([u8; 64], u8)> {
-    let bytes = base64::engine::general_purpose::STANDARD.decode(sig_b64).ok()?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(sig_b64)
+        .ok()?;
     if bytes.len() != 65 {
         return None;
     }
@@ -204,7 +204,7 @@ pub fn sign_electrum(
     out[1..33].copy_from_slice(&compact[0..32]);
     out[33..65].copy_from_slice(&compact[32..64]);
 
-    Ok(base64::engine::general_purpose::STANDARD.encode(&out))
+    Ok(base64::engine::general_purpose::STANDARD.encode(out))
 }
 
 /// A ZeroNet signing identity: a WIF private key plus its derived address.
@@ -218,8 +218,7 @@ impl ZeronetKey {
     /// (uncompressed) ZeroNet address.
     pub fn from_wif(wif: &str) -> Result<Self, String> {
         let sk_bytes = wif_to_private(wif)?;
-        let sk =
-            secp256k1::SecretKey::from_slice(&sk_bytes).map_err(|e| e.to_string())?;
+        let sk = secp256k1::SecretKey::from_slice(&sk_bytes).map_err(|e| e.to_string())?;
         let secp = Secp256k1::new();
         let pk = PublicKey::from_secret_key(&secp, &sk);
         let address = public_key_to_address(&pk, false);
@@ -255,10 +254,9 @@ impl ZeronetKey {
                 serde_json::json!({ self.address.clone(): sig_b64 }),
             );
         }
-        Ok(serde_json::to_string(&doc).map_err(|e| e.to_string())?)
+        serde_json::to_string(&doc).map_err(|e| e.to_string())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -267,8 +265,10 @@ mod tests {
     /// Golden data from ZeroNet's own `Test/TestCryptBitcoin.py::testVerify`
     /// (a real cert-verify data + signature pair circulating in the network).
     const DATA: &str = "1NQUem2M4cAqWua6BVFBADtcSP55P4QobM#web/gitcenter";
-    const SIGN_UNCOMPRESSED: &str = "G6YkcFTuwKMVMHI2yycGQIFGbCZVNsZEZvSlOhKpHUt/BlADY94egmDAWdlrbbFrP9wH4aKcEfbLO8sa6f63VU0=";
-    const SIGN_COMPRESSED: &str = "H6YkcFTuwKMVMHI2yycGQIFGbCZVNsZEZvSlOhKpHUt/BlADY94egmDAWdlrbbFrP9wH4aKcEfbLO8sa6f63VU0=";
+    const SIGN_UNCOMPRESSED: &str =
+        "G6YkcFTuwKMVMHI2yycGQIFGbCZVNsZEZvSlOhKpHUt/BlADY94egmDAWdlrbbFrP9wH4aKcEfbLO8sa6f63VU0=";
+    const SIGN_COMPRESSED: &str =
+        "H6YkcFTuwKMVMHI2yycGQIFGbCZVNsZEZvSlOhKpHUt/BlADY94egmDAWdlrbbFrP9wH4aKcEfbLO8sa6f63VU0=";
 
     fn hex(b: &[u8]) -> String {
         b.iter().map(|x| format!("{:02x}", x)).collect()
@@ -308,7 +308,8 @@ mod tests {
         // Sign a message with the WIF key, then recover the address from the
         // signature. Must round-trip to the same address (proves the sign and
         // recover paths agree on framing + recid + address derivation).
-        let key = ZeronetKey::from_wif("5K9S6dVpufGnroRgFrT6wsKiz2mJRYsC73eWDmajaHserAp3F1C").unwrap();
+        let key =
+            ZeronetKey::from_wif("5K9S6dVpufGnroRgFrT6wsKiz2mJRYsC73eWDmajaHserAp3F1C").unwrap();
         let msg = "1NQUem2M4cAqWua6BVFBADtcSP55P4QobM#web/gitcenter";
         let sig = key.sign(msg).unwrap();
         assert_eq!(recover_address(msg, &sig).as_deref(), Some(key.address()));
@@ -318,7 +319,8 @@ mod tests {
     fn sign_content_roundtrip_via_verify() {
         // sign_content() emits a ZeroNet content.json; verify_zeronet_content()
         // must accept it (self-consistency of the publish+verify path).
-        let key = ZeronetKey::from_wif("5K9S6dVpufGnroRgFrT6wsKiz2mJRYsC73eWDmajaHserAp3F1C").unwrap();
+        let key =
+            ZeronetKey::from_wif("5K9S6dVpufGnroRgFrT6wsKiz2mJRYsC73eWDmajaHserAp3F1C").unwrap();
         let content = serde_json::json!({
             "modified": 1700000000.123,
             "files": {"index.html": {"sha512": "ab".repeat(32), "size": 1234, "optional": false}},
@@ -376,7 +378,11 @@ mod dbl_golden {
     #[test]
     fn long_message_dbl_matches_zenet_electrum() {
         let sc = long_sign_str();
-        assert_eq!(sc.len(), 342, "sign string must match Python's 342-byte golden");
+        assert_eq!(
+            sc.len(),
+            342,
+            "sign string must match Python's 342-byte golden"
+        );
         assert_eq!(
             hex(&bitcoin_double_sha256(&sc)),
             "2b3554887a3cb31897b7bdee97b0508643f8c37809c650240419a2f145682c0e"

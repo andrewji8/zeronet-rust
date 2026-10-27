@@ -1,4 +1,4 @@
-﻿//! Connection pool keyed by peer id.
+//! Connection pool keyed by peer id.
 
 use std::net::SocketAddr;
 
@@ -13,7 +13,9 @@ pub struct Pool {
 
 impl Pool {
     pub fn new() -> Self {
-        Self { conns: Mutex::new(std::collections::HashMap::new()) }
+        Self {
+            conns: Mutex::new(std::collections::HashMap::new()),
+        }
     }
 
     /// Register or replace the connection for `id`.

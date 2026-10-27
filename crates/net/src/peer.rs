@@ -1,4 +1,4 @@
-﻿//! A client that talks to a single peer over TCP.
+//! A client that talks to a single peer over TCP.
 //!
 //! Wire protocol: one JSON `Rpc` request per length-prefixed frame (see
 //! `frame.rs`). `GetFile` responses use the `FileResponse` shape.
@@ -41,7 +41,9 @@ pub async fn get_file(addr: SocketAddr, site: &str, path: &str) -> Result<Vec<u8
     let resp_bytes = read_frame(&mut stream).await?;
     let resp: FileResponse = serde_json::from_slice(&resp_bytes)?;
     if !resp.ok {
-        return Err(PeerError::PeerError(resp.error.unwrap_or_else(|| "no error detail".into())));
+        return Err(PeerError::PeerError(
+            resp.error.unwrap_or_else(|| "no error detail".into()),
+        ));
     }
     let data = base64::engine::general_purpose::STANDARD
         .decode(&resp.data_b64)

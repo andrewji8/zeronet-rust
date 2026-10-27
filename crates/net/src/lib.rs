@@ -4,12 +4,12 @@
 //! tokio-native sockets (no gevent monkey-patch).
 
 pub mod conn;
-pub mod frame;
-pub mod rpc;
-pub mod peer;
-pub mod server;
 pub mod dht;
+pub mod frame;
+pub mod peer;
+pub mod rpc;
 pub mod secure;
+pub mod server;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ pub struct PeerConn {
 
 /// Wire DHT helpers (transport, address book, provider exchange).
 pub use dht::{
-    AddressBook, NetQueryTransport, find_providers_over_wire, peer_addr, provide_over_wire,
+    find_providers_over_wire, peer_addr, provide_over_wire, AddressBook, NetQueryTransport,
 };
 
 /// Secure Noise-XX transport API (X25519 + HKDF + ChaCha20-Poly1305).
@@ -36,13 +36,13 @@ pub use dht::{
 /// `fakedomains` SNI anti-DPI hack: it authenticates both peers (mutual
 /// static keys) and is forward-secret (fresh ephemeral key per session).
 pub use secure::{
-    NoiseIdentity, SecureConn, SecErr, initiator_handshake, responder_handshake, sec_get_file,
+    initiator_handshake, responder_handshake, sec_get_file, NoiseIdentity, SecErr, SecureConn,
 };
 
 /// Manage a pool of peer connections.
 pub struct ConnectionManager {
     pub kademlia: Arc<Kademlia>,
-    pub inbound: Arc<Mutex< Vec<PeerConn>  >>,
+    pub inbound: Arc<Mutex<Vec<PeerConn>>>,
     pub listen_addr: SocketAddr,
 }
 
@@ -56,10 +56,14 @@ impl ConnectionManager {
         })
     }
 
-    /// Open an outbound connection to 	arget at ddr.
-    pub async fn connect_outbound(&self, target: PeerId, addr: SocketAddr) -> Result<TcpStream, NetError> {
+    /// Open an outbound connection to target at addr.
+    pub async fn connect_outbound(
+        &self,
+        target: PeerId,
+        addr: SocketAddr,
+    ) -> Result<TcpStream, NetError> {
         let stream = TcpStream::connect(addr).await?;
-        // In a full implementation, record the connection in the pool keyed by 	arget
+        // In a full implementation, record the connection in the pool keyed by target
         // and run the handshake + DHT protocol on top of it.
         let _ = target;
         Ok(stream)

@@ -1,4 +1,4 @@
-﻿//! SQLite persistence for the storage layer: the local `HashField` index and
+//! SQLite persistence for the storage layer: the local `HashField` index and
 //! cached `SiteManifest`s.
 //!
 //! The point is to survive restarts: after a node downloads files, the hash
@@ -172,7 +172,8 @@ mod tests {
         content::merkle::verify_manifest(&manifest).unwrap();
 
         let db = Db::open(&path).unwrap();
-        db.save_site_manifest(&identity.site_key(), &manifest).unwrap();
+        db.save_site_manifest(&identity.site_key(), &manifest)
+            .unwrap();
 
         let loaded = db.load_site_manifests().unwrap();
         assert_eq!(loaded.len(), 1);
@@ -182,4 +183,3 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 }
-
