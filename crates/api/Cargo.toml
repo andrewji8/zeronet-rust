@@ -8,8 +8,13 @@ kad = { path = "../kad" }
 content = { path = "../content" }
 storage = { path = "../storage" }
 worker = { path = "../worker" }
-tokio = { workspace = true, features = ["macros", "rt", "sync", "net"] }
+net = { path = "../net" }
+tokio = { workspace = true, features = ["macros", "rt", "sync", "net", "fs"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 futures = { workspace = true }
+axum = { workspace = true, features = ["ws"] }
+
+[dev-dependencies]
+tower = { workspace = true }

@@ -34,7 +34,8 @@ fn print_usage() {
     println!("ZeroNet-Rust v0.1.0");
     println!();
     println!("USAGE:");
-    println!("  zeronet-rs node [DIR] [--max-sec N] [--listen host:port] [--bootstrap host:port]...");
+    println!("  zeronet-rs node [DIR] [--max-sec N] [--listen host:port] [--api host:port] [--bootstrap host:port]...");
+    println!("                     start a full node (Kademlia + TCP RPC + persistence + axum API)");
     println!("                     start a full node (Kademlia + TCP RPC + persistence)");
     println!("                     bootstrap peers are connected symmetrically and retried");
     println!("                     until each one succeeds (up to --max-sec); the peer");
@@ -52,6 +53,7 @@ async fn run_node(args: &[String]) {
     let mut data_dir = PathBuf::from(".zrs-node");
     let mut max_sec = 15u64; // default demo duration
     let mut listen: Option<std::net::SocketAddr> = None;
+    let mut api_listen: Option<std::net::SocketAddr> = None;
     let mut bootstrap: Vec<std::net::SocketAddr> = Vec::new();
     let mut i = 2;
     while i < args.len() {
@@ -66,6 +68,15 @@ async fn run_node(args: &[String]) {
                 if i + 1 < args.len() {
                     listen = Some(args[i + 1].parse().unwrap_or_else(|_| {
                         eprintln!("bad --listen addr: {}", args[i + 1]);
+                        std::process::exit(2);
+                    }));
+                    i += 1;
+                }
+            }
+            "--api" => {
+                if i + 1 < args.len() {
+                    api_listen = Some(args[i + 1].parse().unwrap_or_else(|_| {
+                        eprintln!("bad --api addr: {}", args[i + 1]);
                         std::process::exit(2);
                     }));
                     i += 1;
@@ -152,6 +163,20 @@ async fn run_node(args: &[String]) {
         "  inbound RPC:     JSON frames on {} (listen={})",
         server_handle.addr, listen_addr
     );
+
+    // Optional HTTP/WS API (axum) for UIs and admin tooling.
+    if let Some(api_addr) = api_listen {
+        tokio::spawn({
+            let dht_arc = dht_arc.clone();
+            let providers = providers.clone();
+            let addr_book = addr_book.clone();
+            let root = data_dir.clone();
+            async move {
+                eprintln!("  api server:      axum on {api_addr}");
+                let _ = api::start_at(dht_arc, providers, addr_book, root, api_addr).await;
+            }
+        });
+    }
 
     // If the user gave bootstrap peers, connect to each of them now AND
     // periodically (in case the peer started later, or the first attempt
@@ -268,5 +293,7 @@ fn hex_decode(s: &str, out: &mut [u8; 32]) {
             .unwrap_or_else(|_| panic!("bad hex in ZRS_EXPECTED_HASH"));
     }
 }
+
+
 
 

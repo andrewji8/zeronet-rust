@@ -32,6 +32,8 @@ ripemd160 = "0.9"
 base58 = "0.2"
 base64 = "0.22"
 digest = "0.10"
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
 
 [package]
 name = "zeronet-rs"
@@ -54,6 +56,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 futures = { workspace = true }
+
+
+
 
 
 

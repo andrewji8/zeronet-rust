@@ -49,7 +49,7 @@ ZRS_EXPECTED_HASH=<64-hex blake3> ./target/debug/zeronet-rs download 127.0.0.1:P
 ## 测试
 
 ```bash
-cargo test          # 33 lib + 3 集成 + 1 双进程冒烟 tests，全绿
+cargo test          # 41 tests 全绿（含 axum API 4 个 + 双进程冒烟 1 个）
 ```
 
 | crate | 测试数 | 覆盖 |
@@ -91,12 +91,13 @@ cargo test          # 33 lib + 3 集成 + 1 双进程冒烟 tests，全绿
 - [x] **SQLite 持久化（`rusqlite` bundled）：HashField + SiteManifest + 路由表 落盘，重启不丢索引**
 - [x] `node` 子命令接通：tokio runtime + TCP 监听 + `--bootstrap` 多节点组网 + 持久化
 - [ ] DHT 实际走线：`PutValue/GetValue/FindProviders` RPC 经 TCP + 可选 TLS/Noise
-- [ ] `api` 的 axum 路由（替代 ZeroNet 949 行 `UiRequest`）
+- [x] `api` 的 axum 路由：`/status`、`/sites/{site}/{path}`（路径穿越防护）、`/download`（DHT 全链路）、`/ws`
 - [x] `worker` 接入 `find_providers`（`download_via_dht`），"发现→取文件→校验→落盘"全链路打通
 
 ## 许可证
 
 MIT OR Apache-2.0
+
 
 
 
