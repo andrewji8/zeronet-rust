@@ -30,6 +30,7 @@ async fn main() {
         }
         "publish" => run_publish(&args).await,
         "download" => run_download(&args).await,
+        "blake3" => run_blake3(&args),
         _ => print_usage(),
     }
 }
@@ -52,6 +53,8 @@ fn print_usage() {
     println!("                     start the node and broadcast the provider over the DHT.");
     println!("  zeronet-rs download <host:port> <site> <path>");
     println!("                     fetch a file from a peer (BLAKE3-checked)");
+    println!("  zeronet-rs blake3 <file>");
+    println!("                     print the 64-hex BLAKE3 hash of a file (needed for download)");
     println!("  zeronet-rs help                     show this message");
 }
 
@@ -751,4 +754,22 @@ async fn run_download(args: &[String]) {
             std::process::exit(1);
         }
     }
+}
+
+/// Print the 64-hex BLAKE3 hash of a file — the value `download` needs in
+/// `ZRS_EXPECTED_HASH`, without leaving the CLI.
+fn run_blake3(args: &[String]) {
+    let path = args.get(2).cloned().unwrap_or_default();
+    if path.is_empty() {
+        eprintln!("usage: zeronet-rs blake3 <file>");
+        std::process::exit(2);
+    }
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("failed to read {path}: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!("{}", blake3::hash(&bytes).to_hex());
 }
