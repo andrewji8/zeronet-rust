@@ -7,7 +7,10 @@ pub mod download;
 pub mod engine;
 pub mod task;
 
-pub use download::{download_and_store, download_via_dht, fetch_file, stage_of, DownloadError};
+pub use download::{
+    download_and_store, download_via_dht, download_via_dht_secure, fetch_file, secure_fetch_file,
+    stage_of, DownloadError,
+};
 pub use engine::{DownloadEngine, DownloadTaskError, TaskOutcome};
 
 use kad::PeerId;

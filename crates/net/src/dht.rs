@@ -333,3 +333,55 @@ pub async fn connect_and_bootstrap_secure(
     }
     Ok((remote_peer, remote.hex().to_string()))
 }
+
+/// Secure variant of [`find_providers_over_wire`]: for each peer in the
+/// address book, run a Noise-XX handshake then send the `FindProviders`
+/// RPC *inside the encrypted channel*. The remote side must be running a
+/// `net::server::start_secure` (or `start_secure_at`), not the plaintext
+/// `start_at`. Returns the same `(peer, optional-addr)` pairs.
+pub async fn find_providers_over_wire_secure(
+    addr_book: &AddressBook,
+    identity: &crate::secure::NoiseIdentity,
+    content_key: &[u8],
+    count: u32,
+) -> Vec<(PeerId, Option<SocketAddr>)> {
+    let targets = addr_book.drain();
+    let key = kad::hash_key(content_key).to_vec();
+    let mut out: Vec<(PeerId, Option<SocketAddr>)> = Vec::new();
+    for (_peer, addr) in targets.iter() {
+        let req = Rpc::FindProviders {
+            content_key: key.clone(),
+            count,
+        };
+        let resp = secure_rpc_roundtrip(*addr, identity, &req).await.ok();
+        if let Some(v) = resp {
+            if v.get("ok") == Some(&json!(true)) {
+                for p in parse_peers(&v) {
+                    if !out.iter().any(|(o, _)| o == &p.0) {
+                        out.push(p);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// One encrypted RPC round-trip: connect + Noise-XX handshake, then send
+/// `req` and receive exactly one response frame. Both sides must be
+/// `start_secure` / `initiator_handshake` aware.
+async fn secure_rpc_roundtrip(
+    addr: SocketAddr,
+    identity: &crate::secure::NoiseIdentity,
+    req: &Rpc,
+) -> Result<Value, String> {
+    use crate::secure::initiator_handshake;
+    let stream = TcpStream::connect(addr).await.map_err(|e| e.to_string())?;
+    let (mut conn, _remote) = initiator_handshake(stream, identity)
+        .await
+        .map_err(|e| e.to_string())?;
+    let body = serde_json::to_vec(req).map_err(|e| e.to_string())?;
+    conn.send(&body).await.map_err(|e| e.to_string())?;
+    let resp = conn.recv().await.map_err(|e| e.to_string())?;
+    serde_json::from_slice(&resp).map_err(|e| e.to_string())
+}

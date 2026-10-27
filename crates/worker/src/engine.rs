@@ -22,6 +22,8 @@ pub enum TaskOutcome {
 pub enum DownloadTaskError {
     #[error("peer: {0}")]
     Peer(String),
+    #[error("secure: {0}")]
+    Secure(String),
     #[error("hash or store: {0}")]
     Store(String),
     #[error("no reachable provider for content key")]
@@ -102,6 +104,7 @@ impl From<crate::DownloadError> for DownloadTaskError {
             crate::DownloadError::Peer(p) => DownloadTaskError::Peer(p.to_string()),
             crate::DownloadError::Store(s) => DownloadTaskError::Store(s),
             crate::DownloadError::NoProvider => DownloadTaskError::NoProvider,
+            crate::DownloadError::Secure(msg) => DownloadTaskError::Secure(msg),
         }
     }
 }

@@ -28,10 +28,10 @@ crates/
 │             以及完整的 ZeroNet 兼容层（Secp256k1 验签 + 签名器，Python JSON 精确序列化）
 ├── net       TCP 传输层：长度前缀帧、GetFile/握手 RPC、peer 客户端、
 │             DHT 走线（provide/find_providers over wire + AddressBook + bootstrap），
-│             以及 **Noise-XX 加密通道**（X25519 + HKDF + ChaCha20-Poly1305，正式反 DPI）
+│             以及 **Noise-XX 加密通道**（X25519 + HKDF + ChaCha20-Poly1305，正式反 DPI）+ DHT 走线的安全变体 `find_providers_over_wire_secure`（每个查询各走一次 Noise 握手）
 ├── storage   本地存储：站点目录、HashField 索引、store_verified(BLAKE3 校验+防路径穿越)、SQLite 持久化(Db)
 ├── worker    并发下载：TaskQueue、DownloadEngine(有界并发窗口)、download_and_store、
-│             download_via_dht（发现 provider → 取文件 → 校验 → 落盘 全链路）
+│             download_via_dht（发现 provider → 取文件 → 校验 → 落盘 全链路）+ `download_via_dht_secure`（同样全链路但走 Noise 加密通道）
 └── api       axum HTTP/WS 路由：/status、/sites/{site}/{path}(防穿越)、/download(DHT 全链路)、/ws
 src/main.rs   CLI 入口：node(含 --secure-listen/--secure-bootstrap) / create-site / download / help
 ```
@@ -61,14 +61,14 @@ ZRS_EXPECTED_HASH=<64-hex blake3> ./target/debug/zeronet-rs download 127.0.0.1:P
 ## 测试
 
 ```bash
-cargo test          # 46 tests 全绿（含 axum API 4 + Noise-XX 5 + 双进程 bootstrap 冒烟 1 + 双进程 secure 冒烟）
+cargo test          # 47 tests 全绿（含 axum API 4 + Noise-XX 5 + 双进程 bootstrap 冒烟 1 + 双进程 secure 冒烟）
 ```
 
 | crate | 测试数 | 覆盖 |
 |---|---|---|
 | `kad` | 10 | `cpl`/`xor_distance` 距离度量、路由表 IP 多样性上限、`hash_key`、**路由表 SQLite 持久化 roundtrip** |
 | `content` | 18 | BLAKE3 Merkle 回环、CPython `json.dumps` 逐字节 golden、ZeroNet 官方 ECRECOVER 向量、varint 双分支双 SHA256 golden、sign→recover 自回环 |
-| `net` | 8 | loopback 服务 roundtrip、**双节点 DHT over TCP**（互发现 + provider 交换 + 发现→下载全链路）、**Noise-XX 加密 roundtrip + 身份绑定 + 篡改拒绝** |
+| `net` | 9 | loopback 服务 roundtrip、**双节点 DHT over TCP**（互发现 + provider 交换 + 发现→下载全链路）、**Noise-XX 加密 roundtrip + 身份绑定 + 篡改拒绝** |
 | `worker` | 3 | loopback 真实下载（连接→GetFile→base64 解码→BLAKE3 校验→写盘）、拒绝错误哈希、批量并发 |
 | `storage` | 2 | **HashField + SiteManifest SQLite 持久化 roundtrip** |
 | `api` | 4 | `/status`、`/sites/{site}/{path}` 防路径穿越、`/download` 拒绝错误哈希 |
@@ -123,7 +123,7 @@ cargo test          # 46 tests 全绿（含 axum API 4 + Noise-XX 5 + 双进程 
 - [x] **Noise-XX 加密传输层（X25519 + HKDF + ChaCha20-Poly1305）：`net::secure` + `--secure-listen/--secure-bootstrap`**
 - [x] `api` 的 axum 路由：`/status`、`/sites/{site}/{path}`（路径穿越防护）、`/download`（DHT 全链路）、`/ws`
 - [x] `worker` 接入 `find_providers`（`download_via_dht`），"发现→取文件→校验→落盘"全链路打通
-- [ ] 把 `worker` 的下载/`find_providers` 也切到加密通道（当前 worker 仍走明文 `get_file`）
+- [ ] **worker 切到 Noise 加密通道**：`net::dht::find_providers_over_wire_secure`（每个查询各走一次 Noise 握手）+ `worker::download_via_dht_secure`（`sec_get_file` 拉文件 + BLAKE3 校验落盘）；明文路径保留，新增 1 个 e2e 测试覆盖全链路
 - [ ] site-publish CLI（create-site → 签名 content.json → 经 DHT announce provider）
 
 ## 许可证

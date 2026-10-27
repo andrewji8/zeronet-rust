@@ -86,6 +86,8 @@ pub async fn download_via_dht(
 pub enum DownloadError {
     #[error("peer: {0}")]
     Peer(#[from] PeerError),
+    #[error("secure: {0}")]
+    Secure(String),
     #[error("store: {0}")]
     Store(String),
     #[error("no reachable provider found for content key")]
@@ -100,6 +102,71 @@ pub fn stage_of(err: &DownloadError) -> &'static str {
         DownloadError::Peer(PeerError::Json(_)) => "parse",
         DownloadError::Peer(PeerError::PeerError(_)) => "peer-reply",
         DownloadError::Store(_) => "verify-or-write",
+        DownloadError::Secure(_) => "secure-channel",
         DownloadError::NoProvider => "discovery",
     }
+}
+
+/// Fetch a file over a Noise-XX-encrypted channel, returning the bytes.
+///
+/// Connect + handshake to `addr` (a `net::server::start_secure` endpoint),
+/// then one encrypted `GetFile` round-trip. This is the encrypted twin of
+/// [`fetch_file`].
+pub async fn secure_fetch_file(
+    addr: SocketAddr,
+    identity: &net::NoiseIdentity,
+    site: &str,
+    path: &str,
+) -> Result<Vec<u8>, DownloadError> {
+    net::sec_get_file(addr, identity, site, path)
+        .await
+        .map_err(|e| DownloadError::Secure(e.to_string()))
+}
+
+/// The full encrypted chain: **discover -> download (Noise) -> verify ->
+/// store**.
+///
+/// 1. `net::dht::find_providers_over_wire_secure` asks the known nodes who
+///    provides `content_key`, each query running inside its own Noise-XX
+///    handshake.
+/// 2. Each provider is resolved to a reachable address (from the provider
+///    record or the address book).
+/// 3. `net::sec_get_file` fetches the bytes over a fresh encrypted channel;
+///    the first provider that BLAKE3-verifies wins.
+#[allow(clippy::too_many_arguments)]
+pub async fn download_via_dht_secure(
+    addr_book: &AddressBook,
+    identity: &net::NoiseIdentity,
+    content_key: &[u8],
+    site: &str,
+    path: &str,
+    expected: [u8; 32],
+    root: &Path,
+    provider_count: u32,
+) -> Result<std::path::PathBuf, DownloadError> {
+    let providers =
+        net::dht::find_providers_over_wire_secure(addr_book, identity, content_key, provider_count)
+            .await;
+    if providers.is_empty() {
+        return Err(DownloadError::NoProvider);
+    }
+
+    let mut last_err = None;
+    for (peer_id, known_addr) in &providers {
+        let addr = (*known_addr).or_else(|| net::dht::peer_addr(addr_book, peer_id));
+        let addr = match addr {
+            Some(a) => a,
+            None => continue,
+        };
+        match secure_fetch_file(addr, identity, site, path).await {
+            Ok(data) => {
+                storage::store_verified(root, expected, path, &data)
+                    .await
+                    .map_err(|e| DownloadError::Store(e.to_string()))?;
+                return Ok(root.join(path));
+            }
+            Err(e) => last_err = Some(e),
+        }
+    }
+    Err(last_err.unwrap_or(DownloadError::NoProvider))
 }
